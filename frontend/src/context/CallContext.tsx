@@ -138,6 +138,15 @@ const webrtcAvailable = () => !!getRTC();
 
 const RING_TIMEOUT_MS = 45000;
 
+/** RN-web's Alert.alert is a no-op — use window.alert on web so users always see feedback. */
+const notify = (title: string, message: string) => {
+  if (Platform.OS === "web") {
+    window.alert(`${title}\n\n${message}`);
+  } else {
+    Alert.alert(title, message);
+  }
+};
+
 export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
 }) => {
@@ -237,7 +246,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     async (peer: User) => {
       if (callRef.current) return;
       if (!webrtcAvailable()) {
-        Alert.alert(
+        notify(
           "Audio calls",
           Platform.OS === "web"
             ? "Your browser doesn't support audio calls."
@@ -256,13 +265,13 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
             sendSignal({ type: "call_end", to: peer.id });
             cleanupMedia();
             setCall(null);
-            Alert.alert("No answer", `${peer.name} didn't pick up. Try again later!`);
+            notify("No answer", `${peer.name} didn't pick up. Try again later!`);
           }
         }, RING_TIMEOUT_MS);
       } catch {
         cleanupMedia();
         setCall(null);
-        Alert.alert(
+        notify(
           "Call failed",
           "Could not access the microphone. Please allow microphone access and try again.",
         );
@@ -277,7 +286,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
     if (!webrtcAvailable()) {
       sendSignal({ type: "call_decline", to: current.peer.id });
       setCall(null);
-      Alert.alert(
+      notify(
         "Audio calls",
         "Audio calls work in the installed app (production build) or on the web.",
       );
@@ -362,7 +371,7 @@ export const CallProvider: React.FC<{ children: React.ReactNode }> = ({
         if (current?.status === "outgoing") {
           cleanupMedia();
           setCall(null);
-          Alert.alert("Offline", `${current.peer.name} is offline right now.`);
+          notify("Offline", `${current.peer.name} is offline right now.`);
         }
         break;
       case "call_decline":

@@ -1,0 +1,30 @@
+{
+  "summary": "1:1 audio call retest — ALL 4 SCENARIOS PASS. Happy path: A→Mei call shows persistent Ringing overlay (not closing instantly), B receives incoming, B accepts, both sides show active call-timer counting up (0:02 → 0:04), mute toggle switches label to 'You are muted', A taps End → overlays close on BOTH sides. Decline: B taps decline → both overlays close cleanly. Offline: calling a freshly-registered (never-connected) user triggers window.alert 'Offline\\n\\nOffline Ghost is offline right now.' and overlay closes gracefully. Mic denied: context without microphone permission gets window.alert 'Call failed\\n\\nCould not access the microphone...' — no silent close. The regression (overlay closing instantly with no feedback) is fixed; cross-platform notify() using window.alert on web is working end-to-end. Tests executed with two independent contexts under a full-chromium launch (channel='chromium') with --use-fake-ui-for-media-devices and --use-fake-device-for-media-stream so getUserMedia actually succeeds.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "PulseRing (CallContext)", "issue": "Console warning: 'props.pointerEvents is deprecated. Use style.pointerEvents'. Reference: /app/frontend/src/context/CallContext.tsx:61 — pointerEvents=\"none\" prop should be moved into the style object for RN Web / RN 0.75+."}
+    ]
+  },
+  "test_report_links": ["/app/test_reports/call_test.py"],
+  "action_items": [
+    "Optional cleanup: move pointerEvents=\"none\" from JSX prop to StyleSheet in PulseRing (CallContext.tsx:61) to silence the RN Web deprecation warning.",
+    "Consider adding a seed cleanup step for ad-hoc test users (offline_*@test.com) created during offline-call testing — not blocking."
+  ],
+  "critical_code_review_comments": [
+    "notify() correctly branches on Platform.OS === 'web' to use window.alert; RN Alert.alert is used on native — matches the RCA.",
+    "cleanupMedia() clears ringTimeoutRef, pending ICE, stops tracks, and detaches remote audio — no resource leaks after end/decline/offline.",
+    "call_unavailable path (offline peer) correctly runs only for status==='outgoing' to avoid clobbering an active call.",
+    "Ring timeout (45s) is guarded by callRef.current?.status === 'outgoing' so late fires after accept are safe."
+  ],
+  "updated_files": ["/app/test_reports/call_test.py (new — full call flow regression suite)"],
+  "success_rate": {"backend": "N/A (frontend-only retest)", "frontend": "100% (4/4 call scenarios)"},
+  "seed_data_creation": "Created 1 throwaway user per offline-test run via /api/auth/register with email offline_<random>@test.com (name 'Offline Ghost'). These accumulate in the users collection; safe to purge by email prefix if desired.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Playwright must use full chromium (channel='chromium'), NOT the default headless_shell — the shell binary does not honour --use-fake-device-for-media-stream, so getUserMedia rejects and the call closes with a mic-permission alert (looks like a bug but is a test-env issue). With channel='chromium' + fake-media args + context permissions=['microphone'], all four flows pass. Full test suite lives at /app/test_reports/call_test.py.",
+  "rca_of_issue": "RCA (from main agent) confirmed correct: RN-web's Alert.alert is a no-op, so previous getUserMedia failures + call_unavailable + ring timeouts closed the overlay silently. Fix (notify() -> window.alert on web) is verified to surface a visible dialog in every failure branch: mic denied, offline peer, and no-answer. Combined with earlier ICE buffering and 45s ring timeout, the audio-call feature is now fully functional and observable to the user."
+}
