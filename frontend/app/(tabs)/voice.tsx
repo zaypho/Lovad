@@ -173,7 +173,7 @@ export default function Voice() {
                     url={item.host?.avatar_url}
                     size={28}
                     flagCode={countryToCode(item.host?.country)}
-                    frameColor={item.host?.active_frame?.color}
+                    frame={item.host?.active_frame}
                   />
                   <Text style={styles.hostName}>
                     {item.host?.name} · {timeAgo(item.created_at)}

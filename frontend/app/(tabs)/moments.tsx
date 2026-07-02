@@ -194,7 +194,7 @@ export default function Moments() {
                     size={42}
                     flagCode={countryToCode(item.author?.country)}
                     online={item.author?.is_online}
-                    frameColor={item.author?.active_frame?.color}
+                    frame={item.author?.active_frame}
                   />
                 </Pressable>
                 <View style={{ flex: 1 }}>

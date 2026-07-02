@@ -61,7 +61,7 @@ export interface User {
   is_vip?: boolean;
   vip_tier?: "weekly" | "monthly" | "lifetime" | null;
   active_badge?: { id: string; emoji: string; expires_at?: string | null } | null;
-  active_frame?: { id: string; color: string; expires_at?: string | null } | null;
+  active_frame?: { id: string; color: string; colors?: string[] | null; animated?: boolean; expires_at?: string | null } | null;
   coins?: number;
   privacy?: Record<string, boolean>;
   is_online?: boolean;
@@ -119,6 +119,8 @@ export interface MarketItem {
   price: number;
   duration_days: number | null;
   color?: string;
+  colors?: string[];
+  animated?: boolean;
   desc: string;
   active: boolean;
 }

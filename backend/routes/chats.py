@@ -11,6 +11,7 @@ from models import (
     ImageMessageCreate,
     MessageCreate,
     VoiceMessageCreate,
+    _vip_active,
     apply_privacy,
     user_card,
 )
@@ -69,26 +70,29 @@ async def create_or_get_conversation(body: ConversationCreate, current_user: Cur
     )
     if existing:
         return await conversation_public(existing, current_user["_id"])
-    # Free users can start chats with up to 10 people; mutual follows are exempt.
-    if not current_user.get("is_vip"):
-        conv_count = await conversations_col.count_documents(
-            {"participant_ids": current_user["_id"]}
+    # Daily new-partner caps: free users 10/day, VIP 25/day. Mutual follows are exempt.
+    is_vip = _vip_active(current_user)
+    daily_cap = 25 if is_vip else 10
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    usage = current_user.get("new_chat_usage") or {}
+    used_today = usage.get("count", 0) if usage.get("date") == today else 0
+    counted = used_today < daily_cap
+    if not counted:
+        i_follow = await follows_col.find_one(
+            {"follower_id": current_user["_id"], "following_id": body.partner_id}
         )
-        if conv_count >= 10:
-            i_follow = await follows_col.find_one(
-                {"follower_id": current_user["_id"], "following_id": body.partner_id}
+        follows_me = await follows_col.find_one(
+            {"follower_id": body.partner_id, "following_id": current_user["_id"]}
+        )
+        if not (i_follow and follows_me):
+            raise HTTPException(
+                status_code=403,
+                detail=(
+                    f"Daily limit reached — you can start chats with {daily_cap} new people per day."
+                    + ("" if is_vip else " Upgrade to VIP for 25 per day.")
+                    + " Mutual follows can always chat."
+                ),
             )
-            follows_me = await follows_col.find_one(
-                {"follower_id": body.partner_id, "following_id": current_user["_id"]}
-            )
-            if not (i_follow and follows_me):
-                raise HTTPException(
-                    status_code=403,
-                    detail=(
-                        "Free users can message up to 10 people. "
-                        "Follow each other to chat, or upgrade to VIP."
-                    ),
-                )
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "_id": str(uuid.uuid4()),
@@ -99,6 +103,11 @@ async def create_or_get_conversation(body: ConversationCreate, current_user: Cur
         "updated_at": now,
     }
     await conversations_col.insert_one(doc)
+    if counted:
+        await users_col.update_one(
+            {"_id": current_user["_id"]},
+            {"$set": {"new_chat_usage": {"date": today, "count": used_today + 1}}},
+        )
     return await conversation_public(doc, current_user["_id"])
 
 

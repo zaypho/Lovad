@@ -6,7 +6,7 @@ from fastapi import APIRouter, HTTPException
 
 from auth_utils import CurrentUser
 from db import follows_col, media_col, profile_visits_col, users_col
-from models import AvatarUpload, UserUpdate, apply_privacy, user_card, user_public
+from models import AvatarUpload, UserUpdate, _vip_active, apply_privacy, user_card, user_public
 from ws_manager import manager
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -86,7 +86,10 @@ async def my_visitors(current_user: CurrentUser):
             card["visited_at"] = d["visited_at"]
             card["is_online"] = manager.is_online(u["_id"])
             visitors.append(apply_privacy(card, u))
-    return {"count": len(visitors), "visitors": visitors}
+    # Only VIP members can see WHO visited; free users get the count only.
+    if not _vip_active(current_user):
+        return {"count": len(visitors), "visitors": [], "vip_required": True}
+    return {"count": len(visitors), "visitors": visitors, "vip_required": False}
 
 
 @router.get("/me/visited")
@@ -174,14 +177,32 @@ async def list_partners(
     current_user: CurrentUser,
     language: str | None = None,
     search: str | None = None,
+    native: str | None = None,
+    learning: str | None = None,
+    gender: str | None = None,
+    online_only: bool = False,
 ):
     """Partners list. Default: users whose native language matches my learning
-    language, or who are learning my native language. `language=all` shows everyone."""
+    language, or who are learning my native language. `language=all` shows everyone.
+    Explicit search filters (native/learning/gender/online_only) bypass matching."""
     query: dict = {
         "_id": {"$ne": current_user["_id"]},
         "native_language": {"$ne": None},
     }
-    if language and language != "all":
+    explicit = bool(native or learning or gender or search or online_only)
+    if explicit:
+        if native:
+            query["native_language"] = native
+        if learning:
+            query["$or"] = [
+                {"learning_language": learning},
+                {"learning_languages": learning},
+            ]
+        if gender in ("male", "female"):
+            query["gender"] = gender
+        if search:
+            query["name"] = {"$regex": search, "$options": "i"}
+    elif language and language != "all":
         query["$or"] = [
             {"native_language": language},
             {"teach_languages": language},
@@ -209,10 +230,10 @@ async def list_partners(
             ors.append({"learning_languages": {"$in": my_teach}})
         if ors:
             query["$or"] = ors
-    if search:
-        query["name"] = {"$regex": search, "$options": "i"}
     docs = await users_col.find(query).sort("created_at", -1).to_list(100)
     online_ids = manager.online_user_ids()
+    if online_only:
+        docs = [d for d in docs if d["_id"] in online_ids]
     cards = []
     for d in docs:
         card = user_card(d)

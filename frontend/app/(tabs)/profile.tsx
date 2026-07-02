@@ -252,7 +252,7 @@ export default function Profile() {
               url={user.avatar_url}
               size={80}
               flagCode={countryToCode(user.country)}
-              frameColor={user.active_frame?.color}
+              frame={user.active_frame}
             />
             <Pressable
               testID="avatar-edit-btn"

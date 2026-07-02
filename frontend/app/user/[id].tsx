@@ -97,7 +97,7 @@ export default function UserProfile() {
               size={96}
               flagCode={countryToCode(profile.country)}
               online={profile.is_online}
-              frameColor={profile.active_frame?.color}
+              frame={profile.active_frame}
             />
             <View style={styles.nameRow}>
               <Text style={styles.name}>{profile.name}</Text>

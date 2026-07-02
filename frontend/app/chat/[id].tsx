@@ -237,11 +237,14 @@ export default function ChatScreen() {
     try {
       const result = await api.post<{ translated: string }>("/ai/translate", {
         text: msg.text,
-        target_language: langName(user?.native_language || "en"),
+        target_language: user?.native_language || "en",
       });
       setTranslations((prev) => ({ ...prev, [msg.id]: result.translated }));
-    } catch {
-      // leave untranslated on failure
+    } catch (e) {
+      Alert.alert(
+        "Translate",
+        e instanceof Error ? e.message : "Translation failed. Try again.",
+      );
     } finally {
       setTranslating(null);
     }

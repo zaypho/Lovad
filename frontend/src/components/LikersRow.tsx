@@ -139,7 +139,7 @@ export const LikersRow: React.FC<LikersRowProps> = ({
                       size={40}
                       flagCode={countryToCode(item.country)}
                       online={item.is_online}
-                      frameColor={item.active_frame?.color}
+                      frame={item.active_frame}
                     />
                     <Text
                       style={[styles.likerName, { color: colors.onSurface }]}

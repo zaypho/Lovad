@@ -1,11 +1,77 @@
 import { Image } from "expo-image";
 import React from "react";
 import { StyleSheet, Text, View } from "react-native";
+import Animated, {
+  Easing,
+  interpolateColor,
+  useAnimatedStyle,
+  useSharedValue,
+  withRepeat,
+  withTiming,
+} from "react-native-reanimated";
 
 import { countryFlagUrl } from "@/src/constants/countries";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts } from "@/src/theme";
 import { assetUrl } from "@/src/utils/api";
+
+export interface AvatarFrame {
+  color: string;
+  colors?: string[] | null;
+  animated?: boolean;
+}
+
+/** Animated avatar ring: cycles colors (animated frames) and/or pulses (speaking). */
+const AnimatedRing: React.FC<{
+  size: number;
+  gap: number;
+  width: number;
+  colors: string[];
+  pulse?: boolean;
+  testID?: string;
+}> = ({ size, gap, width, colors, pulse, testID }) => {
+  const t = useSharedValue(0);
+
+  React.useEffect(() => {
+    t.value = 0;
+    t.value = withRepeat(
+      withTiming(1, {
+        duration: pulse ? 800 : 1800,
+        easing: Easing.inOut(Easing.ease),
+      }),
+      -1,
+      true,
+    );
+  }, [t, pulse]);
+
+  const palette = colors.length > 1 ? colors : [colors[0], colors[0]];
+  const stops = palette.map((_, i) => i / (palette.length - 1));
+
+  const animStyle = useAnimatedStyle(() => ({
+    borderColor: interpolateColor(t.value, stops, palette),
+    transform: [{ scale: pulse ? 1 + t.value * 0.08 : 1 }],
+    opacity: pulse ? 1 - t.value * 0.3 : 1,
+  }));
+
+  return (
+    <Animated.View
+      pointerEvents="none"
+      testID={testID}
+      style={[
+        {
+          position: "absolute",
+          top: -gap,
+          left: -gap,
+          right: -gap,
+          bottom: -gap,
+          borderRadius: (size + gap * 2) / 2,
+          borderWidth: width,
+        },
+        animStyle,
+      ]}
+    />
+  );
+};
 
 interface AvatarProps {
   name?: string | null;
@@ -17,9 +83,9 @@ interface AvatarProps {
   flagCode?: string | null;
   /** Shows a green presence dot at the top-right when true. */
   online?: boolean;
-  /** Colored ring around the avatar (marketplace frame). */
-  frameColor?: string | null;
-  /** Green "active speaker" ring (voice rooms). Takes priority over frameColor. */
+  /** Ring around the avatar (marketplace frame). Animated frames cycle colors. */
+  frame?: AvatarFrame | null;
+  /** Green "active speaker" pulsing ring (voice rooms). Takes priority over frame. */
   isSpeaking?: boolean;
 }
 
@@ -76,9 +142,16 @@ export const Avatar: React.FC<AvatarProps> = ({
     </View>
   );
 
-  const ringColor = isSpeaking ? "#22C55E" : frameColor || null;
+  const ringColors = isSpeaking
+    ? ["#22C55E", "#86EFAC"]
+    : frame
+      ? frame.animated && frame.colors?.length
+        ? frame.colors
+        : [frame.color]
+      : null;
+  const ringAnimated = isSpeaking || !!frame?.animated;
 
-  if (!flagCode && !online && !ringColor) return content;
+  if (!flagCode && !online && !ringColors) return content;
 
   const dotSize = Math.max(9, Math.round(size * 0.22));
   const ringWidth = Math.max(2, Math.round(size * 0.05));
@@ -87,21 +160,32 @@ export const Avatar: React.FC<AvatarProps> = ({
   return (
     <View style={[styles.wrap, baseStyle]}>
       {content}
-      {ringColor ? (
-        <View
-          pointerEvents="none"
-          testID={testID ? `${testID}-ring` : undefined}
-          style={{
-            position: "absolute",
-            top: -ringGap,
-            left: -ringGap,
-            right: -ringGap,
-            bottom: -ringGap,
-            borderRadius: (size + ringGap * 2) / 2,
-            borderWidth: ringWidth,
-            borderColor: ringColor,
-          }}
-        />
+      {ringColors ? (
+        ringAnimated ? (
+          <AnimatedRing
+            testID={testID ? `${testID}-ring` : undefined}
+            size={size}
+            gap={ringGap}
+            width={ringWidth}
+            colors={ringColors}
+            pulse={isSpeaking}
+          />
+        ) : (
+          <View
+            pointerEvents="none"
+            testID={testID ? `${testID}-ring` : undefined}
+            style={{
+              position: "absolute",
+              top: -ringGap,
+              left: -ringGap,
+              right: -ringGap,
+              bottom: -ringGap,
+              borderRadius: (size + ringGap * 2) / 2,
+              borderWidth: ringWidth,
+              borderColor: ringColors[0],
+            }}
+          />
+        )
       ) : null}
       {flagCode ? (
         <Image

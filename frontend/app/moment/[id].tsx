@@ -114,7 +114,7 @@ export default function MomentDetail() {
               name={moment.author.name}
               url={moment.author.avatar_url}
               size={30}
-              frameColor={moment.author.active_frame?.color}
+              frame={moment.author.active_frame}
             />
             <Text style={styles.headerAuthorName} numberOfLines={1}>
               {moment.author.name}
@@ -160,7 +160,7 @@ export default function MomentDetail() {
                     size={44}
                     flagCode={countryToCode(moment.author?.country)}
                     online={moment.author?.is_online}
-                    frameColor={moment.author?.active_frame?.color}
+                    frame={moment.author?.active_frame}
                   />
                 </Pressable>
                   <View>

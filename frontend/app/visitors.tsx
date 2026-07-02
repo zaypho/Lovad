@@ -26,14 +26,20 @@ export default function Visitors() {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"visitors" | "visited">("visitors");
+  const [vipRequired, setVipRequired] = useState(false);
+  const [count, setCount] = useState(0);
 
   useEffect(() => {
     setLoading(true);
     api
-      .get<{ count: number; visitors: Visitor[] }>(
+      .get<{ count: number; visitors: Visitor[]; vip_required?: boolean }>(
         tab === "visitors" ? "/users/me/visitors" : "/users/me/visited",
       )
-      .then((d) => setVisitors(d.visitors))
+      .then((d) => {
+        setVisitors(d.visitors);
+        setCount(d.count);
+        setVipRequired(!!d.vip_required);
+      })
       .finally(() => setLoading(false));
   }, [tab]);
 
@@ -72,6 +78,27 @@ export default function Visitors() {
       {loading ? (
         <View style={styles.center}>
           <ActivityIndicator size="large" color={colors.brand} />
+        </View>
+      ) : tab === "visitors" && vipRequired ? (
+        <View style={styles.center} testID="visitors-vip-lock">
+          <View style={styles.lockIconWrap}>
+            <Ionicons name="diamond" size={40} color="#F59E0B" />
+          </View>
+          <Text style={styles.emptyTitle}>
+            {count} {count === 1 ? "person" : "people"} visited your profile
+          </Text>
+          <Text style={styles.emptySub}>
+            Only VIP members can see who visited their profile. Upgrade to
+            unlock your visitor list!
+          </Text>
+          <Pressable
+            testID="visitors-vip-upgrade-btn"
+            style={styles.lockBtn}
+            onPress={() => router.push("/market")}
+          >
+            <Ionicons name="diamond" size={16} color="#FFF" />
+            <Text style={styles.lockBtnText}>Upgrade to VIP</Text>
+          </Pressable>
         </View>
       ) : (
         <FlatList

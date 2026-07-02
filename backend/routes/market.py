@@ -23,6 +23,8 @@ CATALOG = [
     {"id": "frame_blue", "type": "frame", "name": "Sky Ring", "emoji": "🔵", "price": 120, "duration_days": 7, "color": "#0EA5E9", "desc": "Sky-blue avatar ring for 7 days"},
     {"id": "frame_pink", "type": "frame", "name": "Rose Ring", "emoji": "🌸", "price": 120, "duration_days": 7, "color": "#EC4899", "desc": "Rose avatar ring for 7 days"},
     {"id": "frame_green", "type": "frame", "name": "Emerald Ring", "emoji": "🟢", "price": 120, "duration_days": 7, "color": "#22C55E", "desc": "Emerald avatar ring for 7 days"},
+    {"id": "frame_rainbow", "type": "frame", "name": "Rainbow Pulse", "emoji": "🌈", "price": 300, "duration_days": 7, "color": "#F59E0B", "colors": ["#F59E0B", "#EC4899", "#8B5CF6", "#0EA5E9"], "animated": True, "desc": "Animated rainbow ring cycling colors — 7 days"},
+    {"id": "frame_neon", "type": "frame", "name": "Neon Glow", "emoji": "💫", "price": 250, "duration_days": 7, "color": "#22D3EE", "colors": ["#22D3EE", "#22C55E", "#22D3EE"], "animated": True, "desc": "Glowing animated neon ring — 7 days"},
 ]
 ITEM_MAP = {i["id"]: i for i in CATALOG}
 VIP_TIERS = {"vip_weekly": "weekly", "vip_monthly": "monthly", "vip_lifetime": "lifetime"}
@@ -97,6 +99,8 @@ async def buy_item(body: BuyRequest, current_user: CurrentUser):
         updates["active_frame"] = {
             "id": item["id"],
             "color": item["color"],
+            "colors": item.get("colors"),
+            "animated": item.get("animated", False),
             "expires_at": expires,
         }
     await users_col.update_one({"_id": current_user["_id"]}, {"$set": updates})

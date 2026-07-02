@@ -17,7 +17,9 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
+import { VipBadge } from "@/src/components/Badges";
 import { FlagIcon } from "@/src/components/FlagIcon";
+import { SpeakingBars } from "@/src/components/SpeakingBars";
 import { countryToCode } from "@/src/constants/countries";
 import { langName } from "@/src/constants/languages";
 import { useAuth } from "@/src/context/AuthContext";
@@ -185,7 +187,7 @@ export default function RoomScreen() {
           url={member.avatar_url}
           size={size}
           flagCode={countryToCode(member.country)}
-          frameColor={member.active_frame?.color}
+          frame={member.active_frame}
           isSpeaking={member.role !== "listener" && member.mic_on}
         />
         {(member.role === "host" || member.role === "speaker") && (
@@ -195,11 +197,11 @@ export default function RoomScreen() {
               { backgroundColor: member.mic_on ? colors.success : colors.borderStrong },
             ]}
           >
-            <Ionicons
-              name={member.mic_on ? "mic" : "mic-off"}
-              size={11}
-              color="#FFF"
-            />
+            {member.mic_on ? (
+              <SpeakingBars />
+            ) : (
+              <Ionicons name="mic-off" size={11} color="#FFF" />
+            )}
           </View>
         )}
         {member.hand_raised && (

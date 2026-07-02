@@ -36,14 +36,13 @@ export default function Connect() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("match");
-  const [search, setSearch] = useState("");
+  const [scrolled, setScrolled] = useState(false);
 
   const load = useCallback(async () => {
     setError(null);
     try {
       const params = new URLSearchParams();
       if (filter !== "match") params.set("language", filter);
-      if (search.trim()) params.set("search", search.trim());
       const qs = params.toString();
       const data = await api.get<User[]>(`/users/partners${qs ? `?${qs}` : ""}`);
       setPartners(data);
@@ -52,12 +51,11 @@ export default function Connect() {
     } finally {
       setLoading(false);
     }
-  }, [filter, search]);
+  }, [filter]);
 
   useEffect(() => {
-    const t = setTimeout(load, search ? 350 : 0);
-    return () => clearTimeout(t);
-  }, [load, search]);
+    load();
+  }, [load]);
 
   const openChat = async (partner: User) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -127,25 +125,37 @@ export default function Connect() {
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="connect-screen">
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Connect</Text>
-        <Text style={styles.headerSub}>
-          {myLearning.length
-            ? `Partners for your ${myLearning.map((c) => langName(c)).join(", ")} journey`
-            : "Find language partners"}
-        </Text>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.headerTitle}>Connect</Text>
+          <Text style={styles.headerSub}>
+            {myLearning.length
+              ? `Partners for your ${myLearning.map((c) => langName(c)).join(", ")} journey`
+              : "Find language partners"}
+          </Text>
+        </View>
+        {scrolled && (
+          <Pressable
+            testID="connect-search-topbar-btn"
+            style={styles.searchIconBtn}
+            onPress={() => router.push("/search")}
+          >
+            <Ionicons name="search" size={20} color={colors.brand} />
+          </Pressable>
+        )}
       </View>
 
-      <View style={styles.searchBox}>
-        <Ionicons name="search" size={18} color={colors.onSurfaceSecondary} />
-        <TextInput
-          testID="connect-search-input"
-          style={styles.searchInput}
-          placeholder="Search by name..."
-          placeholderTextColor={colors.onSurfaceSecondary}
-          value={search}
-          onChangeText={setSearch}
-        />
-      </View>
+      {!scrolled && (
+        <Pressable
+          testID="connect-search-bar"
+          style={styles.searchBox}
+          onPress={() => router.push("/search")}
+        >
+          <Ionicons name="search" size={18} color={colors.onSurfaceSecondary} />
+          <Text style={styles.searchPlaceholder}>
+            Search partners by name, language...
+          </Text>
+        </Pressable>
+      )}
 
       <View>
         <ScrollView
@@ -202,6 +212,8 @@ export default function Connect() {
           data={partners}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
+          onScroll={(e) => setScrolled(e.nativeEvent.contentOffset.y > 40)}
+          scrollEventThrottle={16}
           ListEmptyComponent={
             <View style={styles.center}>
               <Ionicons
@@ -226,7 +238,7 @@ export default function Connect() {
                 size={56}
                 flagCode={countryToCode(item.country)}
                 online={item.is_online}
-                frameColor={item.active_frame?.color}
+                frame={item.active_frame}
               />
               <View style={styles.cardBody}>
                 <View style={styles.cardTop}>
