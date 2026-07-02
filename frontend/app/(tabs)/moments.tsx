@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
 import { FlagIcon } from "@/src/components/FlagIcon";
+import { countryToCode } from "@/src/constants/countries";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
 import { api, Moment } from "@/src/utils/api";
@@ -118,6 +119,8 @@ export default function Moments() {
                   name={item.author?.name}
                   url={item.author?.avatar_url}
                   size={42}
+                  flagCode={countryToCode(item.author?.country)}
+                  online={item.author?.is_online}
                 />
                 <View style={{ flex: 1 }}>
                   <View style={styles.authorRow}>
@@ -130,7 +133,16 @@ export default function Moments() {
                       size={10}
                       color={colors.onSurfaceSecondary}
                     />
-                    <FlagIcon code={item.author?.learning_language} size={14} />
+                    {(item.author?.learning_languages?.length
+                      ? item.author.learning_languages
+                      : item.author?.learning_language
+                        ? [item.author.learning_language]
+                        : []
+                    )
+                      .slice(0, 3)
+                      .map((c) => (
+                        <FlagIcon key={c} code={c} size={14} />
+                      ))}
                   </View>
                   <Text style={styles.cardTime}>{timeAgo(item.created_at)}</Text>
                 </View>

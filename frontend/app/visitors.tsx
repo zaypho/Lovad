@@ -75,12 +75,19 @@ export default function Visitors() {
                 url={item.avatar_url}
                 size={52}
                 flagCode={countryToCode(item.country)}
+                online={item.is_online}
               />
               <View style={styles.rowInfo}>
                 <Text style={styles.rowName}>{item.name}</Text>
                 <LanguagePair
                   native={item.native_language}
-                  learning={item.learning_language}
+                  teach={item.teach_languages}
+                  learning={
+                    item.learning_languages?.length
+                      ? item.learning_languages
+                      : item.learning_language
+                  }
+                  compact
                 />
               </View>
               <View style={styles.rowRight}>

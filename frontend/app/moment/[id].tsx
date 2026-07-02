@@ -16,6 +16,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
+import { countryToCode } from "@/src/constants/countries";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
 import { api, Moment, MomentComment } from "@/src/utils/api";
@@ -28,6 +29,9 @@ export default function MomentDetail() {
   const [loading, setLoading] = useState(true);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
+  const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(
+    null,
+  );
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
@@ -66,7 +70,7 @@ export default function MomentDetail() {
     try {
       const newComment = await api.post<MomentComment>(
         `/moments/${id}/comments`,
-        { text },
+        { text, reply_to: replyTo?.id },
       );
       setMoment((prev) =>
         prev
@@ -78,6 +82,7 @@ export default function MomentDetail() {
           : prev,
       );
       setDraft("");
+      setReplyTo(null);
     } finally {
       setPosting(false);
     }
@@ -116,6 +121,8 @@ export default function MomentDetail() {
                     name={moment.author?.name}
                     url={moment.author?.avatar_url}
                     size={44}
+                    flagCode={countryToCode(moment.author?.country)}
+                    online={moment.author?.is_online}
                   />
                   <View>
                     <Text style={styles.authorName}>
@@ -156,29 +163,76 @@ export default function MomentDetail() {
               </Text>
             }
             renderItem={({ item }) => (
-              <View style={styles.commentRow}>
+              <View
+                style={[styles.commentRow, item.reply_to && styles.replyRow]}
+              >
                 <Avatar
                   name={item.author?.name}
                   url={item.author?.avatar_url}
                   size={36}
+                  flagCode={countryToCode(item.author?.country)}
+                  online={item.author?.is_online}
                 />
                 <View style={styles.commentBody}>
                   <Text style={styles.commentAuthor}>
                     {item.author?.name}{" "}
                     <Text style={styles.time}>{timeAgo(item.created_at)}</Text>
                   </Text>
+                  {item.reply_to_author ? (
+                    <View style={styles.replyTag}>
+                      <Ionicons
+                        name="return-down-forward"
+                        size={12}
+                        color={colors.brand}
+                      />
+                      <Text style={styles.replyTagText}>
+                        Replying to {item.reply_to_author}
+                      </Text>
+                    </View>
+                  ) : null}
                   <Text style={styles.commentText}>{item.text}</Text>
+                  <Pressable
+                    testID={`comment-reply-btn-${item.id}`}
+                    onPress={() =>
+                      setReplyTo({
+                        id: item.id,
+                        name: item.author?.name || "comment",
+                      })
+                    }
+                    hitSlop={6}
+                    style={{ alignSelf: "flex-start" }}
+                  >
+                    <Text style={styles.replyBtnText}>Reply</Text>
+                  </Pressable>
                 </View>
               </View>
             )}
           />
         )}
 
+        {replyTo && (
+          <View style={styles.replyBanner} testID="reply-banner">
+            <Ionicons name="return-down-forward" size={16} color={colors.brand} />
+            <Text style={styles.replyBannerText} numberOfLines={1}>
+              Replying to {replyTo.name}
+            </Text>
+            <Pressable
+              testID="reply-cancel-btn"
+              onPress={() => setReplyTo(null)}
+              hitSlop={8}
+            >
+              <Ionicons name="close" size={18} color={colors.onSurfaceSecondary} />
+            </Pressable>
+          </View>
+        )}
+
         <View style={styles.inputRow}>
           <TextInput
             testID="comment-input"
             style={styles.input}
-            placeholder="Write a comment..."
+            placeholder={
+              replyTo ? `Reply to ${replyTo.name}...` : "Write a comment..."
+            }
             placeholderTextColor={colors.onSurfaceSecondary}
             value={draft}
             onChangeText={setDraft}
@@ -293,6 +347,39 @@ const makeStyles = (colors: ThemeColors) =>
     flexDirection: "row",
     gap: spacing.md,
     paddingVertical: spacing.sm,
+  },
+  replyRow: {
+    marginLeft: spacing.xl + spacing.sm,
+  },
+  replyTag: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  replyTagText: {
+    fontFamily: fonts.textSemi,
+    fontSize: 11,
+    color: colors.brand,
+  },
+  replyBtnText: {
+    fontFamily: fonts.textBold,
+    fontSize: 12,
+    color: colors.brand,
+    marginTop: 2,
+  },
+  replyBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.sm,
+    backgroundColor: colors.brandTertiary,
+  },
+  replyBannerText: {
+    flex: 1,
+    fontFamily: fonts.textSemi,
+    fontSize: 13,
+    color: colors.onBrandTertiary,
   },
   commentBody: {
     flex: 1,

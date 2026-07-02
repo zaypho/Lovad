@@ -12,6 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
+import { countryToCode } from "@/src/constants/countries";
 import { useTheme } from "@/src/context/ThemeContext";
 import { useChatSocket } from "@/src/hooks/use-chat-socket";
 import { fonts, radius, spacing, ThemeColors } from "@/src/theme";
@@ -97,6 +98,8 @@ export default function Chats() {
                 name={item.partner?.name}
                 url={item.partner?.avatar_url}
                 size={54}
+                flagCode={countryToCode(item.partner?.country)}
+                online={item.partner?.is_online}
               />
               <View style={styles.rowBody}>
                 <View style={styles.rowTop}>

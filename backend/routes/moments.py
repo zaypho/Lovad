@@ -6,8 +6,17 @@ from fastapi import APIRouter, HTTPException
 from auth_utils import CurrentUser
 from db import comments_col, moments_col, users_col
 from models import CommentCreate, MomentCreate, user_card
+from ws_manager import manager
 
 router = APIRouter(prefix="/moments", tags=["moments"])
+
+
+def _card_with_presence(author: dict | None) -> dict | None:
+    if not author:
+        return None
+    card = user_card(author)
+    card["is_online"] = manager.is_online(author["_id"])
+    return card
 
 
 async def moment_public(doc: dict, viewer_id: str) -> dict:
@@ -15,7 +24,7 @@ async def moment_public(doc: dict, viewer_id: str) -> dict:
     likes = doc.get("likes", [])
     return {
         "id": doc["_id"],
-        "author": user_card(author) if author else None,
+        "author": _card_with_presence(author),
         "text": doc["text"],
         "like_count": len(likes),
         "liked_by_me": viewer_id in likes,
@@ -27,8 +36,10 @@ async def moment_public(doc: dict, viewer_id: str) -> dict:
 def comment_public(doc: dict, author: dict | None) -> dict:
     return {
         "id": doc["_id"],
-        "author": user_card(author) if author else None,
+        "author": _card_with_presence(author),
         "text": doc["text"],
+        "reply_to": doc.get("reply_to"),
+        "reply_to_author": doc.get("reply_to_author"),
         "created_at": doc["created_at"],
     }
 
@@ -93,6 +104,15 @@ async def add_comment(moment_id: str, body: CommentCreate, current_user: Current
         "text": body.text,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if body.reply_to:
+        parent = await comments_col.find_one(
+            {"_id": body.reply_to, "moment_id": moment_id}
+        )
+        if not parent:
+            raise HTTPException(status_code=404, detail="Comment to reply to not found")
+        parent_author = await users_col.find_one({"_id": parent["user_id"]})
+        comment["reply_to"] = body.reply_to
+        comment["reply_to_author"] = parent_author.get("name") if parent_author else None
     await comments_col.insert_one(comment)
     await moments_col.update_one({"_id": moment_id}, {"$inc": {"comment_count": 1}})
     return comment_public(comment, current_user)

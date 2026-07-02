@@ -13,6 +13,21 @@ from db import comments_col, moments_col, users_col
 
 PASSWORD = "Demo1234!"
 
+DEMO_INTERESTS = [
+    "Movies",
+    "Music",
+    "Travel",
+    "Food",
+    "Photography",
+    "Yoga",
+    "Fitness",
+    "Gaming",
+    "Reading",
+    "Art",
+    "Football",
+    "Coffee",
+]
+
 DEMO_USERS = [
     {
         "email": "mei@demo.com",
@@ -20,6 +35,8 @@ DEMO_USERS = [
         "country": "China",
         "native_language": "zh",
         "learning_language": "en",
+        "teach_languages": [],
+        "learning_languages": ["en", "ja"],
         "proficiency": "Intermediate",
         "bio": "Hi! I'm a designer from Shanghai. I love coffee and want to practice English for travel. 我可以帮你学中文!",
         "avatar_url": "https://i.pravatar.cc/150?img=44",
@@ -50,6 +67,8 @@ DEMO_USERS = [
         "country": "France",
         "native_language": "fr",
         "learning_language": "es",
+        "teach_languages": ["en"],
+        "learning_languages": ["es"],
         "proficiency": "Intermediate",
         "bio": "Bonjour! Parisian baker learning Spanish for my move to Barcelona. Je peux t'aider en français!",
         "avatar_url": "https://i.pravatar.cc/150?img=31",
@@ -80,6 +99,8 @@ DEMO_USERS = [
         "country": "United Kingdom",
         "native_language": "en",
         "learning_language": "ja",
+        "teach_languages": [],
+        "learning_languages": ["ja", "ko"],
         "proficiency": "Beginner",
         "bio": "London teacher obsessed with Japan. Happy to help with British English & idioms!",
         "avatar_url": "https://i.pravatar.cc/150?img=16",
@@ -100,6 +121,8 @@ DEMO_USERS = [
         "country": "United States",
         "native_language": "en",
         "learning_language": "es",
+        "teach_languages": [],
+        "learning_languages": ["es", "fr", "zh"],
         "proficiency": "Beginner",
         "bio": "Just here exploring LinguaConnect!",
         "avatar_url": "https://i.pravatar.cc/150?img=68",
@@ -122,9 +145,29 @@ async def seed():
     email_to_id = {}
     created_users = 0
     for i, u in enumerate(DEMO_USERS):
+        u.setdefault("teach_languages", [])
+        u.setdefault("learning_languages", [u["learning_language"]])
+        u.setdefault("age", 21 + (i * 2) % 15)
+        u.setdefault(
+            "interests",
+            [DEMO_INTERESTS[(i + j) % len(DEMO_INTERESTS)] for j in range(4)],
+        )
         existing = await users_col.find_one({"email": u["email"]})
         if existing:
             email_to_id[u["email"]] = existing["_id"]
+            lang_updates = {}
+            if "learning_languages" not in existing:
+                lang_updates["learning_languages"] = u["learning_languages"]
+            if "teach_languages" not in existing:
+                lang_updates["teach_languages"] = u["teach_languages"]
+            if "age" not in existing:
+                lang_updates["age"] = u["age"]
+            if "interests" not in existing:
+                lang_updates["interests"] = u["interests"]
+            if lang_updates:
+                await users_col.update_one(
+                    {"_id": existing["_id"]}, {"$set": lang_updates}
+                )
             continue
         user_id = str(uuid.uuid4())
         await users_col.insert_one(

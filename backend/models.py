@@ -22,6 +22,15 @@ class UserUpdate(BaseModel):
     native_language: Optional[str] = None
     learning_language: Optional[str] = None
     proficiency: Optional[str] = None
+    teach_languages: Optional[list[str]] = Field(default=None, max_length=2)
+    learning_languages: Optional[list[str]] = Field(default=None, max_length=3)
+    age: Optional[int] = Field(default=None, ge=13, le=120)
+    interests: Optional[list[str]] = Field(default=None, max_length=20)
+
+
+class AvatarUpload(BaseModel):
+    image_base64: str = Field(min_length=1)
+    mime: str = "image/jpeg"
 
 
 class MessageCreate(BaseModel):
@@ -38,6 +47,7 @@ class MomentCreate(BaseModel):
 
 class CommentCreate(BaseModel):
     text: str = Field(min_length=1, max_length=500)
+    reply_to: Optional[str] = None
 
 
 class TranslateRequest(BaseModel):
@@ -71,8 +81,19 @@ class RoomRoleUpdate(BaseModel):
     role: str = Field(pattern="^(speaker|listener)$")
 
 
+class RoomUserAction(BaseModel):
+    user_id: str
+
+
 class RoomMessageCreate(BaseModel):
     text: str = Field(min_length=1, max_length=500)
+
+
+def _learning_list(doc: dict) -> list:
+    ll = doc.get("learning_languages")
+    if ll:
+        return ll
+    return [doc["learning_language"]] if doc.get("learning_language") else []
 
 
 def user_public(doc: dict) -> dict:
@@ -86,6 +107,10 @@ def user_public(doc: dict) -> dict:
         "native_language": doc.get("native_language"),
         "learning_language": doc.get("learning_language"),
         "proficiency": doc.get("proficiency"),
+        "teach_languages": doc.get("teach_languages") or [],
+        "learning_languages": _learning_list(doc),
+        "age": doc.get("age"),
+        "interests": doc.get("interests") or [],
         "streak_count": doc.get("streak_count", 0),
         "created_at": doc.get("created_at"),
     }
@@ -101,5 +126,9 @@ def user_card(doc: dict) -> dict:
         "native_language": doc.get("native_language"),
         "learning_language": doc.get("learning_language"),
         "proficiency": doc.get("proficiency"),
+        "teach_languages": doc.get("teach_languages") or [],
+        "learning_languages": _learning_list(doc),
+        "age": doc.get("age"),
+        "interests": doc.get("interests") or [],
         "bio": doc.get("bio"),
     }

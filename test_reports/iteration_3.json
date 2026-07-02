@@ -1,0 +1,47 @@
+{
+  "summary": "Iteration-3 large batch of HelloTalk-clone features tested end-to-end. Backend: 15/15 new regression tests in /app/backend/tests/test_iteration3_features.py pass (profile update, country+age immutability, avatar upload+/api/media/{id} serving, /users/partners best-match with language lists, ?language=zh + ?language=fr filters, moment reply_to comments returning reply_to_author, room kick-bans-rejoin, non-host kick 403, host-cannot-be-kicked 400, hand/dismiss lowers hand, host role change). Frontend E2E (Expo web mobile viewport 390x844): (a) demo@demo.com login OK, tab bar order left→right = ['chats','connect','moments','voice','profile'] as specified, (b) Connect: chip row = 'Best Match' + Spanish + French + Chinese, NO 'Everyone' chip; 9 partner cards render with country-flag avatar badges + multi-language chips (screenshot verified), (c) Profile: profile-screen + avatar-edit-btn (camera badge) + profile-streak-stat/profile-views-stat/profile-days-stat all present; Edit mode shows collapse-native / collapse-teach / collapse-learning (expand → chips appear, collapse → chips hidden — verified via profile-teach-es visibility toggling); profile-save-btn present; profile-interest-movies chip selectable; mode-light-btn/mode-dark-btn present and dark→light theme switch works (screenshot); on user with country+age already set, profile-country-input & profile-age-input are correctly absent and Country row shows lock icon (screenshot 'Bangladesh 🔒'), (d) Chat: chat-screen + chat-media-btn (plus icon) + chat-record-btn + chat-message-input + chat-back-btn all present; grammar-check-btn correctly REMOVED; text send works, (e) Moments: 9 cards; opening detail shows comment-input; posted comment then tapped comment-reply-btn-{id}, reply-banner appears; sent reply and 'Replying to Demo User' tag renders on the nested comment (screenshot confirmed), (f) Voice: room-create-fab opens modal, submitting creates a room, room-host-card renders with HOST badge + host avatar + flag (screenshot), (g) NEW USER SIGNUP FLOW: registered fresh account via auth-submit-btn (signup mode), landed on /onboarding, completed all 6 steps (onboarding-lang-en → skip teach → onboarding-learn-es → onboarding-country-bd → onboarding-age-input=25 → onboarding-interest-movies+music) and was routed to /connect; verified connect-filter-es chip and locked country/age on the new user's profile edit view. Deprecated 'props.pointerEvents' warning still logged on load (carry-over from iteration 1&2). Deep-link auth-hydration race also still reproducible (carry-over LOW; explicitly noted in agent-to-agent context — did NOT re-report as new).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [],
+    "react_native_issues": [
+      {"component": "Multiple screens (Pressable/View)", "issue": "Console still logs 'props.pointerEvents is deprecated. Use style.pointerEvents' on every screen load. Pre-existing carry-over from iteration 1&2. Reference: RN 0.76+ deprecation — audit usage of props.pointerEvents and migrate to style={{pointerEvents:'...'}}."}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration3_features.py",
+    "/app/backend/tests/test_new_features.py",
+    "/app/backend/tests/test_api.py",
+    "/app/test_reports/pytest/iteration3.xml"
+  ],
+  "action_items": [
+    "(CARRY-OVER, LOW) Migrate remaining props.pointerEvents=... usages to style={{ pointerEvents: '...' }} to clear the RN deprecation warning still logged on every screen load.",
+    "(CARRY-OVER, LOW) Auth-hydration race on hard-reload deep-links (401 on first call) — same as iteration 2. Explicitly de-scoped by main agent for this iteration.",
+    "(HYGIENE) Clean up any TEST_* users, TEST moments and TEST rooms this iteration created in the seed DB — testing left behind: 'TEST profile_update' partner card visible on Connect; a couple of 'TEST bad reply' moments and one 'TEST T1 room' voice room (auto-ended manually or left live). Consider a scripted cleanup of _id/name/title LIKE 'TEST%'."
+  ],
+  "critical_code_review_comments": [
+    "backend/routes/users.py update_me correctly makes country+age set-once by popping updates when current_user already has the field (lines 19-22). This is idempotent and safe. ✔",
+    "backend/routes/rooms.py kick_member atomically pops the member and $addToSet-s them to banned[] then broadcasts room_kicked to the ex-member — clean. Rejoin route (join_room) correctly checks doc.banned and returns 403. ✔",
+    "backend/routes/moments.py add_comment resolves reply_to_author by finding parent → parent_author.name; when parent_author missing (deleted user) reply_to_author becomes None (safe). 404 when reply_to id not found. ✔",
+    "backend/routes/users.py list_partners best-match query is a bit tangled: the 'elif language != \"all\"' is always True when language is None, which is fine but could be clearer as 'else:'. Not a bug.",
+    "frontend/app/(tabs)/profile.tsx has ~950 lines — approaching the 700-line threshold; consider splitting the edit-mode collapsible language sections into a <LanguageSectionsEditor> subcomponent for readability.",
+    "frontend/app/(tabs)/profile.tsx duplicates the /users/me/visitors count fetch inside useFocusEffect and via /visitors screen — consolidating through a small useVisitorCount hook would prevent the stale-0 flash on cold-load (also compounds the auth-hydration race)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration3_features.py (new — 15 regression tests for iteration-3 batch)",
+    "/app/test_reports/iteration_3.json (this report)"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 new + 7/7 iteration-2 + 8/8 legacy all pass on this env)",
+    "frontend": "100% on all targeted flows tested via Playwright (tab order, Connect filters+cards, Profile stats/edit/collapsibles/locks/dark-mode, Chat media btn + grammar-removed, Moments reply w/ 'Replying to X' tag, Voice room creation + host-card, new-user 6-step onboarding → Connect)"
+  },
+  "seed_data_creation": "Created several TEST users via /auth/register (prefix TEST_*), a fresh 'T1 New User' via onboarding flow, one 'TEST T1 room' voice room, and a couple of 'TEST bad reply' moments/comments as part of E2E verification. Existing seed users unchanged.",
+  "retest_needed": false,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Login on /auth defaults to SIGN-UP mode — click auth-switch-mode-btn once to switch to Log In before filling demo@demo.com/Demo1234!. Deep-linking to /profile /chats /moments /voice via page.goto AFTER login causes the known auth-hydration race and returns empty lists ('Not authenticated' toast); ALWAYS navigate via the tab bar buttons (tab-chats / tab-connect / tab-moments / tab-voice / tab-profile) once logged in. Moment detail testIDs are `comment-input` and `comment-send-btn` (NOT `moment-comment-input`). Room create button is `room-create-fab` (NOT `voice-create-btn`). Multi-user voice room flow (hand-raise → hand-accept-{id} / hand-dismiss-{id} / room-kick-btn-{id}) NOT exercised via UI in this iteration — backend paths are covered by pytest (test_iteration3_features.py::TestRoomsModeration) but a full two-browser-context UI test remains open if needed. Do NOT modify .env files. WebRTC voice audio is web-only and not exercised.",
+  "rca_of_issue": "No new bugs in this iteration. Two carry-over LOW issues remain: (1) props.pointerEvents deprecation warning — noise only, no functional impact; (2) auth-hydration race on hard-reload deep-links — first API call fires before AsyncStorage-loaded JWT is attached, returning 401 and leaving screens empty. Mitigation is unchanged from iteration 2: gate the (tabs) render on authLoaded===true or install an axios request interceptor that awaits AuthContext.tokenReady."
+}

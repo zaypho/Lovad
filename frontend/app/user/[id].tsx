@@ -14,6 +14,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
 import { LanguagePair } from "@/src/components/LanguagePair";
+import { countryToCode } from "@/src/constants/countries";
 import { langName } from "@/src/constants/languages";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
@@ -57,14 +58,28 @@ export default function UserProfile() {
       ) : (
         <ScrollView contentContainerStyle={styles.scroll}>
           <View style={styles.card}>
-            <Avatar name={profile.name} url={profile.avatar_url} size={96} />
+            <Avatar
+              name={profile.name}
+              url={profile.avatar_url}
+              size={96}
+              flagCode={countryToCode(profile.country)}
+              online={profile.is_online}
+            />
             <Text style={styles.name}>{profile.name}</Text>
             {profile.country && (
-              <Text style={styles.country}>{profile.country}</Text>
+              <Text style={styles.country}>
+                {profile.country}
+                {profile.age ? ` · ${profile.age} yrs` : ""}
+              </Text>
             )}
             <LanguagePair
               native={profile.native_language}
-              learning={profile.learning_language}
+              teach={profile.teach_languages}
+              learning={
+                profile.learning_languages?.length
+                  ? profile.learning_languages
+                  : profile.learning_language
+              }
             />
             {profile.proficiency && (
               <View style={styles.levelChip}>
@@ -110,6 +125,19 @@ export default function UserProfile() {
               {profile.bio || "This partner hasn't written a bio yet."}
             </Text>
           </View>
+
+          {profile.interests && profile.interests.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Interests</Text>
+              <View style={styles.interestWrap}>
+                {profile.interests.map((i) => (
+                  <View key={i} style={styles.interestChip}>
+                    <Text style={styles.interestText}>{i}</Text>
+                  </View>
+                ))}
+              </View>
+            </View>
+          )}
 
           <Pressable
             testID="user-profile-message-btn"
@@ -234,6 +262,22 @@ const makeStyles = (colors: ThemeColors) =>
     fontSize: 15,
     lineHeight: 22,
     color: colors.onSurface,
+  },
+  interestWrap: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  interestChip: {
+    backgroundColor: colors.brandTertiary,
+    borderRadius: radius.pill,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.xs + 2,
+  },
+  interestText: {
+    fontFamily: fonts.textSemi,
+    fontSize: 13,
+    color: colors.onBrandTertiary,
   },
   messageBtn: {
     flexDirection: "row",

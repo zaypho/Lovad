@@ -35,9 +35,13 @@ def message_public(doc: dict) -> dict:
 async def conversation_public(doc: dict, viewer_id: str) -> dict:
     partner_id = next((p for p in doc["participant_ids"] if p != viewer_id), viewer_id)
     partner = await users_col.find_one({"_id": partner_id})
+    partner_card = None
+    if partner:
+        partner_card = user_card(partner)
+        partner_card["is_online"] = manager.is_online(partner_id)
     return {
         "id": doc["_id"],
-        "partner": user_card(partner) if partner else None,
+        "partner": partner_card,
         "last_message": doc.get("last_message"),
         "unread": doc.get("unread", {}).get(viewer_id, 0),
         "updated_at": doc.get("updated_at"),

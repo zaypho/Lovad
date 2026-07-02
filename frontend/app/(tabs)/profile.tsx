@@ -1,13 +1,17 @@
 import { Ionicons } from "@expo/vector-icons";
 import dayjs from "dayjs";
+import * as ImagePicker from "expo-image-picker";
 import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
+  LayoutAnimation,
+  Linking,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
-  Switch,
   Text,
   TextInput,
   View,
@@ -17,6 +21,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "@/src/components/Avatar";
 import { FlagIcon } from "@/src/components/FlagIcon";
 import { LanguagePair } from "@/src/components/LanguagePair";
+import { countryToCode } from "@/src/constants/countries";
+import { INTERESTS, MAX_INTERESTS } from "@/src/constants/interests";
 import {
   LANGUAGES,
   PROFICIENCY_LEVELS,
@@ -36,11 +42,23 @@ export default function Profile() {
   const [name, setName] = useState(user?.name || "");
   const [bio, setBio] = useState(user?.bio || "");
   const [country, setCountry] = useState(user?.country || "");
-  const [learningLang, setLearningLang] = useState(
-    user?.learning_language || null,
+  const [nativeLang, setNativeLang] = useState(user?.native_language || null);
+  const [teachLangs, setTeachLangs] = useState<string[]>(
+    user?.teach_languages || [],
+  );
+  const [learningLangs, setLearningLangs] = useState<string[]>(
+    user?.learning_languages?.length
+      ? user.learning_languages
+      : user?.learning_language
+        ? [user.learning_language]
+        : [],
   );
   const [proficiency, setProficiency] = useState(user?.proficiency || null);
+  const [interests, setInterests] = useState<string[]>(user?.interests || []);
+  const [age, setAge] = useState(user?.age ? String(user.age) : "");
   const [saving, setSaving] = useState(false);
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const [expanded, setExpanded] = useState<string | null>(null);
   const [visitorCount, setVisitorCount] = useState<number | null>(null);
 
   useFocusEffect(
@@ -62,15 +80,81 @@ export default function Profile() {
     ? Math.max(1, dayjs().diff(dayjs(user.created_at), "day") + 1)
     : 1;
 
+  const toggleList = (
+    list: string[],
+    set: (v: string[]) => void,
+    code: string,
+    max: number,
+  ) => {
+    if (list.includes(code)) set(list.filter((c) => c !== code));
+    else if (list.length < max) set([...list, code]);
+  };
+
+  const toggleSection = (key: string) => {
+    if (Platform.OS !== "web") {
+      LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    }
+    setExpanded((prev) => (prev === key ? null : key));
+  };
+
+  const pickAvatar = async () => {
+    const current = await ImagePicker.getMediaLibraryPermissionsAsync();
+    if (!current.granted) {
+      const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!perm.granted) {
+        if (!perm.canAskAgain) {
+          Alert.alert(
+            "Photos",
+            "Photo access is disabled. Enable it in Settings to set a profile photo.",
+            [
+              { text: "Cancel", style: "cancel" },
+              { text: "Open Settings", onPress: () => Linking.openSettings() },
+            ],
+          );
+        } else {
+          Alert.alert("Photos", "Photo access is needed to set your profile photo.");
+        }
+        return;
+      }
+    }
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ["images"],
+      allowsEditing: true,
+      aspect: [1, 1],
+      quality: 0.7,
+      base64: true,
+    });
+    const asset = result.assets?.[0];
+    if (result.canceled || !asset?.base64) return;
+    setUploadingAvatar(true);
+    try {
+      const updated = await api.post<User>("/users/me/avatar", {
+        image_base64: asset.base64,
+        mime: asset.mimeType || "image/jpeg",
+      });
+      setUser(updated);
+    } catch {
+      Alert.alert("Photo", "Could not update your photo. Try again.");
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
   const save = async () => {
     setSaving(true);
     try {
+      const ageNum = parseInt(age, 10);
       const updated = await api.put<User>("/users/me", {
         name: name.trim() || user.name,
         bio,
         country,
-        learning_language: learningLang,
+        native_language: nativeLang,
+        teach_languages: teachLangs.filter((c) => c !== nativeLang),
+        learning_languages: learningLangs,
+        learning_language: learningLangs[0] || null,
         proficiency,
+        interests,
+        age: !Number.isNaN(ageNum) && ageNum >= 13 && ageNum <= 120 ? ageNum : undefined,
       });
       setUser(updated);
       setEditing(false);
@@ -108,7 +192,26 @@ export default function Profile() {
         </View>
 
         <View style={styles.profileCard}>
-          <Avatar name={user.name} url={user.avatar_url} size={80} />
+          <View>
+            <Avatar
+              name={user.name}
+              url={user.avatar_url}
+              size={80}
+              flagCode={countryToCode(user.country)}
+            />
+            <Pressable
+              testID="avatar-edit-btn"
+              style={styles.avatarEditBtn}
+              onPress={pickAvatar}
+              disabled={uploadingAvatar}
+            >
+              {uploadingAvatar ? (
+                <ActivityIndicator size="small" color={colors.onBrand} />
+              ) : (
+                <Ionicons name="camera" size={13} color={colors.onBrand} />
+              )}
+            </Pressable>
+          </View>
           {editing ? (
             <TextInput
               testID="profile-name-input"
@@ -123,8 +226,15 @@ export default function Profile() {
           )}
           <Text style={styles.email}>{user.email}</Text>
           <LanguagePair
-            native={user.native_language}
-            learning={editing ? learningLang : user.learning_language}
+            native={editing ? nativeLang : user.native_language}
+            teach={editing ? teachLangs : user.teach_languages}
+            learning={
+              editing
+                ? learningLangs
+                : user.learning_languages?.length
+                  ? user.learning_languages
+                  : user.learning_language
+            }
           />
           {user.proficiency && !editing && (
             <Text style={styles.proficiency}>
@@ -206,7 +316,7 @@ export default function Profile() {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Country</Text>
-          {editing ? (
+          {editing && !user.country ? (
             <TextInput
               testID="profile-country-input"
               style={styles.input}
@@ -216,39 +326,241 @@ export default function Profile() {
               placeholderTextColor={colors.onSurfaceSecondary}
             />
           ) : (
-            <Text style={styles.bodyText}>{user.country || "Not set"}</Text>
+            <View style={styles.lockedRow}>
+              <Text style={styles.bodyText}>{user.country || "Not set"}</Text>
+              {user.country ? (
+                <Ionicons
+                  name="lock-closed"
+                  size={13}
+                  color={colors.onSurfaceSecondary}
+                />
+              ) : null}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Age</Text>
+          {editing && !user.age ? (
+            <TextInput
+              testID="profile-age-input"
+              style={styles.input}
+              value={age}
+              onChangeText={(t) => setAge(t.replace(/[^0-9]/g, ""))}
+              placeholder="Your age"
+              placeholderTextColor={colors.onSurfaceSecondary}
+              keyboardType="number-pad"
+              maxLength={3}
+            />
+          ) : (
+            <View style={styles.lockedRow}>
+              <Text style={styles.bodyText}>
+                {user.age ? `${user.age} years old` : "Not set"}
+              </Text>
+              {user.age ? (
+                <Ionicons
+                  name="lock-closed"
+                  size={13}
+                  color={colors.onSurfaceSecondary}
+                />
+              ) : null}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>
+            Interests{editing ? ` (${interests.length}/${MAX_INTERESTS})` : ""}
+          </Text>
+          {editing ? (
+            <View style={styles.chipWrap}>
+              {INTERESTS.map((i) => {
+                const active = interests.includes(i);
+                return (
+                  <Pressable
+                    key={i}
+                    testID={`profile-interest-${i.toLowerCase().replace(/\s/g, "-")}`}
+                    onPress={() =>
+                      toggleList(interests, setInterests, i, MAX_INTERESTS)
+                    }
+                    style={[styles.chip, active && styles.chipActive]}
+                  >
+                    <Text
+                      style={[styles.chipText, active && styles.chipTextActive]}
+                    >
+                      {i}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : user.interests?.length ? (
+            <View style={styles.chipWrap}>
+              {user.interests.map((i) => (
+                <View key={i} style={[styles.chip, styles.chipActive]}>
+                  <Text style={[styles.chipText, styles.chipTextActive]}>{i}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.bodyText}>
+              No interests yet. Tap Edit to add some!
+            </Text>
           )}
         </View>
 
         {editing && (
           <>
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Learning language</Text>
+              <Pressable
+                testID="collapse-native"
+                style={styles.collapseHeader}
+                onPress={() => toggleSection("native")}
+              >
+                <Text style={styles.sectionTitle}>Native language</Text>
+                <View style={styles.collapseRight}>
+                  {nativeLang ? <FlagIcon code={nativeLang} size={16} /> : null}
+                  <Ionicons
+                    name={expanded === "native" ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.onSurfaceSecondary}
+                  />
+                </View>
+              </Pressable>
+              {expanded === "native" && (
               <View style={styles.chipWrap}>
-                {LANGUAGES.filter((l) => l.code !== user.native_language).map(
-                  (lang) => {
-                    const active = learningLang === lang.code;
-                    return (
-                      <Pressable
-                        key={lang.code}
-                        testID={`profile-learning-${lang.code}`}
-                        onPress={() => setLearningLang(lang.code)}
-                        style={[styles.chip, active && styles.chipActive]}
+                {LANGUAGES.map((lang) => {
+                  const active = nativeLang === lang.code;
+                  return (
+                    <Pressable
+                      key={lang.code}
+                      testID={`profile-native-${lang.code}`}
+                      onPress={() => {
+                        setNativeLang(lang.code);
+                        setTeachLangs((prev) =>
+                          prev.filter((c) => c !== lang.code),
+                        );
+                        setLearningLangs((prev) =>
+                          prev.filter((c) => c !== lang.code),
+                        );
+                      }}
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <FlagIcon code={lang.code} size={14} />
+                      <Text
+                        style={[
+                          styles.chipText,
+                          active && styles.chipTextActive,
+                        ]}
                       >
-                        <FlagIcon code={lang.code} size={14} />
-                        <Text
-                          style={[
-                            styles.chipText,
-                            active && styles.chipTextActive,
-                          ]}
-                        >
-                          {lang.name}
-                        </Text>
-                      </Pressable>
-                    );
-                  },
-                )}
+                        {lang.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
               </View>
+              )}
+            </View>
+            <View style={styles.section}>
+              <Pressable
+                testID="collapse-teach"
+                style={styles.collapseHeader}
+                onPress={() => toggleSection("teach")}
+              >
+                <Text style={styles.sectionTitle}>
+                  I can also teach ({teachLangs.length}/2)
+                </Text>
+                <View style={styles.collapseRight}>
+                  {teachLangs.map((c) => (
+                    <FlagIcon key={c} code={c} size={16} />
+                  ))}
+                  <Ionicons
+                    name={expanded === "teach" ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.onSurfaceSecondary}
+                  />
+                </View>
+              </Pressable>
+              {expanded === "teach" && (
+              <View style={styles.chipWrap}>
+                {LANGUAGES.filter((l) => l.code !== nativeLang).map((lang) => {
+                  const active = teachLangs.includes(lang.code);
+                  return (
+                    <Pressable
+                      key={lang.code}
+                      testID={`profile-teach-${lang.code}`}
+                      onPress={() => {
+                        toggleList(teachLangs, setTeachLangs, lang.code, 2);
+                        setLearningLangs((prev) =>
+                          prev.filter((c) => c !== lang.code),
+                        );
+                      }}
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <FlagIcon code={lang.code} size={14} />
+                      <Text
+                        style={[
+                          styles.chipText,
+                          active && styles.chipTextActive,
+                        ]}
+                      >
+                        {lang.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              )}
+            </View>
+            <View style={styles.section}>
+              <Pressable
+                testID="collapse-learning"
+                style={styles.collapseHeader}
+                onPress={() => toggleSection("learning")}
+              >
+                <Text style={styles.sectionTitle}>
+                  Learning languages ({learningLangs.length}/3)
+                </Text>
+                <View style={styles.collapseRight}>
+                  {learningLangs.map((c) => (
+                    <FlagIcon key={c} code={c} size={16} />
+                  ))}
+                  <Ionicons
+                    name={expanded === "learning" ? "chevron-up" : "chevron-down"}
+                    size={16}
+                    color={colors.onSurfaceSecondary}
+                  />
+                </View>
+              </Pressable>
+              {expanded === "learning" && (
+              <View style={styles.chipWrap}>
+                {LANGUAGES.filter(
+                  (l) => l.code !== nativeLang && !teachLangs.includes(l.code),
+                ).map((lang) => {
+                  const active = learningLangs.includes(lang.code);
+                  return (
+                    <Pressable
+                      key={lang.code}
+                      testID={`profile-learning-${lang.code}`}
+                      onPress={() =>
+                        toggleList(learningLangs, setLearningLangs, lang.code, 3)
+                      }
+                      style={[styles.chip, active && styles.chipActive]}
+                    >
+                      <FlagIcon code={lang.code} size={14} />
+                      <Text
+                        style={[
+                          styles.chipText,
+                          active && styles.chipTextActive,
+                        ]}
+                      >
+                        {lang.name}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              )}
             </View>
             <View style={styles.section}>
               <Text style={styles.sectionTitle}>Level</Text>
@@ -290,13 +602,33 @@ export default function Profile() {
                 {mode === "dark" ? "On — easy on the eyes" : "Off — bright & friendly"}
               </Text>
             </View>
-            <Switch
-              testID="dark-mode-switch"
-              value={mode === "dark"}
-              onValueChange={toggleMode}
-              trackColor={{ false: colors.surfaceTertiary, true: colors.brand }}
-              thumbColor="#FFFFFF"
-            />
+            <View style={styles.modeToggle}>
+              <Pressable
+                testID="mode-light-btn"
+                onPress={() => mode === "dark" && toggleMode()}
+                style={[
+                  styles.modeOpt,
+                  mode === "light" && styles.modeOptActive,
+                ]}
+              >
+                <Ionicons
+                  name="sunny"
+                  size={16}
+                  color={mode === "light" ? colors.onBrand : colors.onSurfaceSecondary}
+                />
+              </Pressable>
+              <Pressable
+                testID="mode-dark-btn"
+                onPress={() => mode === "light" && toggleMode()}
+                style={[styles.modeOpt, mode === "dark" && styles.modeOptActive]}
+              >
+                <Ionicons
+                  name="moon"
+                  size={16}
+                  color={mode === "dark" ? colors.onBrand : colors.onSurfaceSecondary}
+                />
+              </Pressable>
+            </View>
           </View>
           <View style={styles.settingDivider} />
           <View style={styles.settingRow}>
@@ -319,7 +651,14 @@ export default function Profile() {
             <View style={{ flex: 1 }}>
               <Text style={styles.settingTitle}>Learning</Text>
               <Text style={styles.settingSub}>
-                {langName(user.learning_language)}
+                {(user.learning_languages?.length
+                  ? user.learning_languages
+                  : user.learning_language
+                    ? [user.learning_language]
+                    : []
+                )
+                  .map((c) => langName(c))
+                  .join(", ") || "Not set"}
                 {user.proficiency ? ` · ${user.proficiency}` : ""} — tap Edit
                 Profile to change
               </Text>
@@ -391,6 +730,35 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       gap: spacing.md,
       ...shadow.card,
+    },
+    avatarEditBtn: {
+      position: "absolute",
+      bottom: -2,
+      left: -6,
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: colors.brand,
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 2,
+      borderColor: colors.surface,
+    },
+    lockedRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+    collapseHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+      minHeight: 28,
+    },
+    collapseRight: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
     },
     name: {
       fontFamily: fonts.display,
@@ -542,6 +910,23 @@ const makeStyles = (colors: ThemeColors) =>
       height: StyleSheet.hairlineWidth,
       backgroundColor: colors.divider,
       marginVertical: spacing.xs,
+    },
+    modeToggle: {
+      flexDirection: "row",
+      backgroundColor: colors.surfaceSecondary,
+      borderRadius: radius.pill,
+      padding: 3,
+      gap: 2,
+    },
+    modeOpt: {
+      width: 34,
+      height: 28,
+      borderRadius: radius.pill,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    modeOptActive: {
+      backgroundColor: colors.brand,
     },
     logoutBtn: {
       flexDirection: "row",

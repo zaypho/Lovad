@@ -18,7 +18,7 @@ import { Avatar } from "@/src/components/Avatar";
 import { FlagIcon } from "@/src/components/FlagIcon";
 import { LanguagePair } from "@/src/components/LanguagePair";
 import { countryToCode } from "@/src/constants/countries";
-import { LANGUAGES, langName } from "@/src/constants/languages";
+import { langName } from "@/src/constants/languages";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
@@ -68,13 +68,17 @@ export default function Connect() {
     }
   };
 
+  const myLearning = (
+    user?.learning_languages?.length
+      ? user.learning_languages
+      : user?.learning_language
+        ? [user.learning_language]
+        : []
+  ).slice(0, 3);
+
   const filterChips = [
     { key: "match", label: "Best Match" },
-    { key: "all", label: "Everyone" },
-    ...LANGUAGES.slice(0, 10).map((l) => ({
-      key: l.code,
-      label: l.name,
-    })),
+    ...myLearning.map((c) => ({ key: c, label: langName(c) })),
   ];
 
   return (
@@ -82,8 +86,8 @@ export default function Connect() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Connect</Text>
         <Text style={styles.headerSub}>
-          {user?.learning_language
-            ? `Partners for your ${langName(user.learning_language)} journey`
+          {myLearning.length
+            ? `Partners for your ${myLearning.map((c) => langName(c)).join(", ")} journey`
             : "Find language partners"}
         </Text>
       </View>
@@ -115,9 +119,7 @@ export default function Connect() {
                 onPress={() => setFilter(chip.key)}
                 style={[styles.filterChip, active && styles.filterChipActive]}
               >
-                {chip.key !== "match" && chip.key !== "all" && (
-                  <FlagIcon code={chip.key} size={14} />
-                )}
+                {chip.key !== "match" && <FlagIcon code={chip.key} size={14} />}
                 <Text
                   style={[
                     styles.filterText,
@@ -171,6 +173,7 @@ export default function Connect() {
                 url={item.avatar_url}
                 size={56}
                 flagCode={countryToCode(item.country)}
+                online={item.is_online}
               />
               <View style={styles.cardBody}>
                 <View style={styles.cardTop}>
@@ -180,7 +183,12 @@ export default function Connect() {
                 </View>
                 <LanguagePair
                   native={item.native_language}
-                  learning={item.learning_language}
+                  teach={item.teach_languages}
+                  learning={
+                    item.learning_languages?.length
+                      ? item.learning_languages
+                      : item.learning_language
+                  }
                   compact
                 />
                 {item.bio ? (
@@ -190,12 +198,6 @@ export default function Connect() {
                 ) : null}
               </View>
               <View style={styles.cardRight}>
-                {item.is_online && (
-                  <View
-                    testID={`partner-online-${item.id}`}
-                    style={styles.onlineDot}
-                  />
-                )}
                 <Pressable
                   testID={`partner-message-btn-${item.id}`}
                   style={styles.msgBtn}

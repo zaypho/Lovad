@@ -28,6 +28,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
 import { VoiceBubble } from "@/src/components/VoiceBubble";
+import { countryToCode } from "@/src/constants/countries";
 import { langName } from "@/src/constants/languages";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCall } from "@/src/context/CallContext";
@@ -36,11 +37,6 @@ import { useChatSocket } from "@/src/hooks/use-chat-socket";
 import { fonts, radius, spacing, ThemeColors } from "@/src/theme";
 import { api, Conversation, Message, mediaUrl } from "@/src/utils/api";
 import { clockTime } from "@/src/utils/time";
-
-interface Correction {
-  corrected: string;
-  explanation: string;
-}
 
 export default function ChatScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -56,8 +52,6 @@ export default function ChatScreen() {
   const [sending, setSending] = useState(false);
   const [translations, setTranslations] = useState<Record<string, string>>({});
   const [translating, setTranslating] = useState<string | null>(null);
-  const [correction, setCorrection] = useState<Correction | null>(null);
-  const [correcting, setCorrecting] = useState(false);
   const [recording, setRecording] = useState(false);
   const [recordSeconds, setRecordSeconds] = useState(0);
   const [uploadingVoice, setUploadingVoice] = useState(false);
@@ -113,7 +107,6 @@ export default function ChatScreen() {
     const text = draft.trim();
     if (!text || sending) return;
     setSending(true);
-    setCorrection(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     try {
       const msg = await api.post<Message>(`/chats/${id}/messages`, { text });
@@ -254,23 +247,6 @@ export default function ChatScreen() {
     }
   };
 
-  const checkGrammar = async () => {
-    const text = draft.trim();
-    if (!text || correcting) return;
-    setCorrecting(true);
-    try {
-      const result = await api.post<Correction>("/ai/correct", {
-        text,
-        language: langName(user?.learning_language),
-      });
-      setCorrection(result);
-    } catch {
-      // user can retry
-    } finally {
-      setCorrecting(false);
-    }
-  };
-
   const partner = conversation?.partner;
 
   return (
@@ -286,7 +262,13 @@ export default function ChatScreen() {
               style={styles.headerInfo}
               onPress={() => router.push(`/user/${partner.id}`)}
             >
-              <Avatar name={partner.name} url={partner.avatar_url} size={38} />
+              <Avatar
+                name={partner.name}
+                url={partner.avatar_url}
+                size={38}
+                flagCode={countryToCode(partner.country)}
+                online={partner.is_online}
+              />
               <View style={{ flex: 1 }}>
                 <Text style={styles.headerName}>{partner.name}</Text>
                 <Text style={styles.headerLang}>
@@ -406,39 +388,6 @@ export default function ChatScreen() {
           />
         )}
 
-        {correction && (
-          <View style={styles.correctionCard} testID="correction-card">
-            <View style={styles.correctionHeader}>
-              <Ionicons name="sparkles" size={16} color={colors.brand} />
-              <Text style={styles.correctionTitle}>AI Suggestion</Text>
-              <Pressable
-                testID="correction-dismiss-btn"
-                onPress={() => setCorrection(null)}
-                hitSlop={8}
-                style={{ marginLeft: "auto" }}
-              >
-                <Ionicons name="close" size={18} color={colors.onSurfaceSecondary} />
-              </Pressable>
-            </View>
-            <Text style={styles.correctionText}>{correction.corrected}</Text>
-            {correction.explanation ? (
-              <Text style={styles.correctionExplanation}>
-                {correction.explanation}
-              </Text>
-            ) : null}
-            <Pressable
-              testID="correction-apply-btn"
-              style={styles.applyBtn}
-              onPress={() => {
-                setDraft(correction.corrected);
-                setCorrection(null);
-              }}
-            >
-              <Text style={styles.applyText}>Use this</Text>
-            </Pressable>
-          </View>
-        )}
-
         {recording ? (
           <View style={styles.recordingBar} testID="recording-bar">
             <View style={styles.recordingDot} />
@@ -472,19 +421,7 @@ export default function ChatScreen() {
               {uploadingImage ? (
                 <ActivityIndicator size="small" color={colors.brand} />
               ) : (
-                <Ionicons name="image-outline" size={20} color={colors.brand} />
-              )}
-            </Pressable>
-            <Pressable
-              testID="grammar-check-btn"
-              onPress={checkGrammar}
-              style={[styles.toolBtn, !draft.trim() && { opacity: 0.4 }]}
-              disabled={!draft.trim() || correcting}
-            >
-              {correcting ? (
-                <ActivityIndicator size="small" color={colors.brand} />
-              ) : (
-                <Ionicons name="sparkles-outline" size={20} color={colors.brand} />
+                <Ionicons name="add" size={24} color={colors.brand} />
               )}
             </Pressable>
             <TextInput
@@ -652,47 +589,6 @@ const makeStyles = (colors: ThemeColors) =>
     },
     bubbleTimeMine: {
       color: "rgba(255,255,255,0.8)",
-    },
-    correctionCard: {
-      marginHorizontal: spacing.lg,
-      marginBottom: spacing.sm,
-      backgroundColor: colors.brandTertiary,
-      borderRadius: radius.md,
-      padding: spacing.lg,
-      gap: spacing.sm,
-    },
-    correctionHeader: {
-      flexDirection: "row",
-      alignItems: "center",
-      gap: spacing.sm,
-    },
-    correctionTitle: {
-      fontFamily: fonts.textBold,
-      fontSize: 13,
-      color: colors.onBrandTertiary,
-    },
-    correctionText: {
-      fontFamily: fonts.textSemi,
-      fontSize: 15,
-      color: colors.onSurface,
-    },
-    correctionExplanation: {
-      fontFamily: fonts.text,
-      fontSize: 13,
-      color: colors.onSurfaceSecondary,
-      lineHeight: 18,
-    },
-    applyBtn: {
-      alignSelf: "flex-start",
-      backgroundColor: colors.brand,
-      borderRadius: radius.pill,
-      paddingHorizontal: spacing.lg,
-      paddingVertical: spacing.sm,
-    },
-    applyText: {
-      color: colors.onBrand,
-      fontFamily: fonts.textBold,
-      fontSize: 13,
     },
     recordingBar: {
       flexDirection: "row",

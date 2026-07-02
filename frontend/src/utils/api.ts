@@ -53,6 +53,10 @@ export interface User {
   native_language?: string | null;
   learning_language?: string | null;
   proficiency?: string | null;
+  teach_languages?: string[];
+  learning_languages?: string[];
+  age?: number | null;
+  interests?: string[];
   is_online?: boolean;
   streak_count?: number;
   profile_views?: number;
@@ -98,6 +102,8 @@ export interface MomentComment {
   id: string;
   author: User | null;
   text: string;
+  reply_to?: string | null;
+  reply_to_author?: string | null;
   created_at: string;
 }
 
@@ -131,3 +137,7 @@ export const audioUrl = (audioId: string): string =>
 
 export const mediaUrl = (mediaId: string): string =>
   `${API_URL}/api/media/${mediaId}`;
+
+/** Resolve relative asset paths (e.g. "/api/media/<id>" avatars) to absolute URLs. */
+export const assetUrl = (u?: string | null): string | null =>
+  !u ? null : u.startsWith("http") || u.startsWith("data:") ? u : `${API_URL}${u}`;

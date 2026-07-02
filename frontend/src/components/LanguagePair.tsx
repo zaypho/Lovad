@@ -9,37 +9,50 @@ import { fonts, radius, spacing, ThemeColors } from "@/src/theme";
 
 interface LanguagePairProps {
   native?: string | null;
-  learning?: string | null;
+  /** Extra languages the user can teach besides their native one (max 2). */
+  teach?: (string | null | undefined)[] | null;
+  /** One learning language or a list of up to 3. */
+  learning?: string | (string | null | undefined)[] | null;
   compact?: boolean;
 }
 
 export const LanguagePair: React.FC<LanguagePairProps> = ({
   native,
+  teach,
   learning,
   compact,
 }) => {
   const { colors } = useTheme();
   const styles = makeStyles(colors);
+  const teachList = [native, ...(teach || [])].filter(Boolean) as string[];
+  const learnList = (
+    Array.isArray(learning) ? learning : learning ? [learning] : []
+  ).filter(Boolean) as string[];
+
   return (
     <View style={styles.row}>
-      <View style={[styles.chip, styles.nativeChip]}>
-        <FlagIcon code={native} size={14} />
-        <Text style={styles.chipText}>
-          {compact ? native?.toUpperCase() : langName(native)}
-        </Text>
-      </View>
+      {teachList.map((code) => (
+        <View key={`t-${code}`} style={[styles.chip, styles.nativeChip]}>
+          <FlagIcon code={code} size={14} />
+          <Text style={styles.chipText}>
+            {compact ? code.toUpperCase() : langName(code)}
+          </Text>
+        </View>
+      ))}
       <Ionicons
         name="swap-horizontal"
         size={14}
         color={colors.onSurfaceSecondary}
         style={{ marginHorizontal: spacing.xs }}
       />
-      <View style={[styles.chip, styles.learningChip]}>
-        <FlagIcon code={learning} size={14} />
-        <Text style={[styles.chipText, styles.learningText]}>
-          {compact ? learning?.toUpperCase() : langName(learning)}
-        </Text>
-      </View>
+      {learnList.slice(0, 3).map((code) => (
+        <View key={`l-${code}`} style={[styles.chip, styles.learningChip]}>
+          <FlagIcon code={code} size={14} />
+          <Text style={[styles.chipText, styles.learningText]}>
+            {compact ? code.toUpperCase() : langName(code)}
+          </Text>
+        </View>
+      ))}
     </View>
   );
 };
@@ -49,6 +62,8 @@ const makeStyles = (colors: ThemeColors) =>
     row: {
       flexDirection: "row",
       alignItems: "center",
+      flexWrap: "wrap",
+      gap: 4,
     },
     chip: {
       flexDirection: "row",

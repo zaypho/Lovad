@@ -19,6 +19,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
 import { FlagIcon } from "@/src/components/FlagIcon";
+import { countryToCode } from "@/src/constants/countries";
 import { LANGUAGES, langName } from "@/src/constants/languages";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
@@ -136,6 +137,7 @@ export default function Voice() {
                     name={item.host?.name}
                     url={item.host?.avatar_url}
                     size={28}
+                    flagCode={countryToCode(item.host?.country)}
                   />
                   <Text style={styles.hostName}>
                     {item.host?.name} · {timeAgo(item.created_at)}

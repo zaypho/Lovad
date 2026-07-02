@@ -26,16 +26,6 @@ export default function TabsLayout() {
       }}
     >
       <Tabs.Screen
-        name="connect"
-        options={{
-          title: "Connect",
-          tabBarButtonTestID: "tab-connect",
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
         name="chats"
         options={{
           title: "Chats",
@@ -46,12 +36,12 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="voice"
+        name="connect"
         options={{
-          title: "Voice",
-          tabBarButtonTestID: "tab-voice",
+          title: "Connect",
+          tabBarButtonTestID: "tab-connect",
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="mic" size={size} color={color} />
+            <Ionicons name="people" size={size} color={color} />
           ),
         }}
       />
@@ -62,6 +52,16 @@ export default function TabsLayout() {
           tabBarButtonTestID: "tab-moments",
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="planet" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="voice"
+        options={{
+          title: "Voice",
+          tabBarButtonTestID: "tab-voice",
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="mic" size={size} color={color} />
           ),
         }}
       />

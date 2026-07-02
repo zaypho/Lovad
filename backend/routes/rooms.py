@@ -5,7 +5,7 @@ from fastapi import APIRouter, HTTPException
 
 from auth_utils import CurrentUser
 from db import room_messages_col, rooms_col, users_col
-from models import RoomCreate, RoomMessageCreate, RoomRoleUpdate, user_card
+from models import RoomCreate, RoomMessageCreate, RoomRoleUpdate, RoomUserAction, user_card
 from ws_manager import manager
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
@@ -96,6 +96,10 @@ async def get_room(room_id: str, current_user: CurrentUser):
 async def join_room(room_id: str, current_user: CurrentUser):
     doc = await get_live_room(room_id)
     uid = current_user["_id"]
+    if uid in doc.get("banned", []):
+        raise HTTPException(
+            status_code=403, detail="You have been removed from this room by the host"
+        )
     if uid not in doc["members"]:
         doc["members"][uid] = {"role": "listener", "mic_on": False, "hand_raised": False}
         await rooms_col.update_one(
@@ -179,6 +183,47 @@ async def change_role(room_id: str, body: RoomRoleUpdate, current_user: CurrentU
         member["mic_on"] = False
     await rooms_col.update_one(
         {"_id": room_id}, {"$set": {f"members.{body.user_id}": member}}
+    )
+    await broadcast_room(doc)
+    return {"ok": True}
+
+
+@router.post("/{room_id}/kick")
+async def kick_member(room_id: str, body: RoomUserAction, current_user: CurrentUser):
+    """Host removes (and bans) a member from the room — HelloTalk style."""
+    doc = await get_live_room(room_id)
+    if doc["host_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the host can remove members")
+    if body.user_id == doc["host_id"]:
+        raise HTTPException(status_code=400, detail="The host cannot be removed")
+    if body.user_id in doc["members"]:
+        doc["members"].pop(body.user_id)
+        await rooms_col.update_one(
+            {"_id": room_id},
+            {
+                "$unset": {f"members.{body.user_id}": ""},
+                "$addToSet": {"banned": body.user_id},
+            },
+        )
+        await manager.send_to_user(
+            body.user_id, {"type": "room_kicked", "room_id": room_id}
+        )
+        await broadcast_room(doc)
+    return {"ok": True}
+
+
+@router.post("/{room_id}/hand/dismiss")
+async def dismiss_hand(room_id: str, body: RoomUserAction, current_user: CurrentUser):
+    """Host rejects a raise-hand request (lowers the member's hand)."""
+    doc = await get_live_room(room_id)
+    if doc["host_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the host can dismiss requests")
+    member = doc["members"].get(body.user_id)
+    if not member:
+        raise HTTPException(status_code=404, detail="Member not in room")
+    member["hand_raised"] = False
+    await rooms_col.update_one(
+        {"_id": room_id}, {"$set": {f"members.{body.user_id}.hand_raised": False}}
     )
     await broadcast_room(doc)
     return {"ok": True}

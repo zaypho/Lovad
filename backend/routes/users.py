@@ -1,11 +1,12 @@
+import base64
 import uuid
 from datetime import datetime, timezone
 
 from fastapi import APIRouter, HTTPException
 
 from auth_utils import CurrentUser
-from db import profile_visits_col, users_col
-from models import UserUpdate, user_card, user_public
+from db import media_col, profile_visits_col, users_col
+from models import AvatarUpload, UserUpdate, user_card, user_public
 from ws_manager import manager
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -14,9 +15,32 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.put("/me")
 async def update_me(body: UserUpdate, current_user: CurrentUser):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
+    # Country and age are set once at signup and cannot be changed afterwards.
+    if current_user.get("country") and "country" in updates:
+        updates.pop("country")
+    if current_user.get("age") and "age" in updates:
+        updates.pop("age")
     if updates:
         await users_col.update_one({"_id": current_user["_id"]}, {"$set": updates})
         current_user.update(updates)
+    return user_public(current_user)
+
+
+@router.post("/me/avatar")
+async def upload_avatar(body: AvatarUpload, current_user: CurrentUser):
+    try:
+        image_bytes = base64.b64decode(body.image_base64)
+    except Exception:
+        raise HTTPException(status_code=400, detail="Invalid image data")
+    if len(image_bytes) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Image too large (max 5MB)")
+    media_id = str(uuid.uuid4())
+    await media_col.insert_one({"_id": media_id, "data": image_bytes, "mime": body.mime})
+    avatar_url = f"/api/media/{media_id}"
+    await users_col.update_one(
+        {"_id": current_user["_id"]}, {"$set": {"avatar_url": avatar_url}}
+    )
+    current_user["avatar_url"] = avatar_url
     return user_public(current_user)
 
 
@@ -37,6 +61,7 @@ async def my_visitors(current_user: CurrentUser):
         if u:
             card = user_card(u)
             card["visited_at"] = d["visited_at"]
+            card["is_online"] = manager.is_online(u["_id"])
             visitors.append(card)
     return {"count": len(visitors), "visitors": visitors}
 
@@ -54,15 +79,31 @@ async def list_partners(
         "native_language": {"$ne": None},
     }
     if language and language != "all":
-        query["native_language"] = language
+        query["$or"] = [
+            {"native_language": language},
+            {"teach_languages": language},
+        ]
     elif language != "all":
-        my_learning = current_user.get("learning_language")
-        my_native = current_user.get("native_language")
+        my_learning = current_user.get("learning_languages") or (
+            [current_user["learning_language"]]
+            if current_user.get("learning_language")
+            else []
+        )
+        my_teach = [
+            l
+            for l in [
+                current_user.get("native_language"),
+                *(current_user.get("teach_languages") or []),
+            ]
+            if l
+        ]
         ors = []
         if my_learning:
-            ors.append({"native_language": my_learning})
-        if my_native:
-            ors.append({"learning_language": my_native})
+            ors.append({"native_language": {"$in": my_learning}})
+            ors.append({"teach_languages": {"$in": my_learning}})
+        if my_teach:
+            ors.append({"learning_language": {"$in": my_teach}})
+            ors.append({"learning_languages": {"$in": my_teach}})
         if ors:
             query["$or"] = ors
     if search:

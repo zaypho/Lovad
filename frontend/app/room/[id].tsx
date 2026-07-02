@@ -18,6 +18,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
 import { FlagIcon } from "@/src/components/FlagIcon";
+import { countryToCode } from "@/src/constants/countries";
 import { langName } from "@/src/constants/languages";
 import { useAuth } from "@/src/context/AuthContext";
 import { useCall } from "@/src/context/CallContext";
@@ -130,6 +131,23 @@ export default function RoomScreen() {
     }
   };
 
+  const kickMember = async (member: RoomMember) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await api.post(`/rooms/${id}/kick`, { user_id: member.id });
+    } catch {
+      // ignore
+    }
+  };
+
+  const dismissHand = async (member: RoomMember) => {
+    try {
+      await api.post(`/rooms/${id}/hand/dismiss`, { user_id: member.id });
+    } catch {
+      // ignore
+    }
+  };
+
   const sendMessage = async () => {
     const text = draft.trim();
     if (!text) return;
@@ -144,8 +162,10 @@ export default function RoomScreen() {
     }
   };
 
-  const speakers = members.filter((m) => m.role === "host" || m.role === "speaker");
+  const host = members.find((m) => m.role === "host");
+  const speakers = members.filter((m) => m.role === "speaker");
   const listeners = members.filter((m) => m.role === "listener");
+  const handRequests = listeners.filter((m) => m.hand_raised);
 
   if (loading || !room) {
     return (
@@ -160,7 +180,12 @@ export default function RoomScreen() {
   const renderMember = (member: RoomMember, size: number) => (
     <View key={member.id} style={styles.memberCell} testID={`room-member-${member.id}`}>
       <View>
-        <Avatar name={member.name} url={member.avatar_url} size={size} />
+        <Avatar
+          name={member.name}
+          url={member.avatar_url}
+          size={size}
+          flagCode={countryToCode(member.country)}
+        />
         {(member.role === "host" || member.role === "speaker") && (
           <View
             style={[
@@ -184,19 +209,31 @@ export default function RoomScreen() {
       <Text style={styles.memberName} numberOfLines={1}>
         {member.id === user?.id ? "You" : member.name.split(" ")[0]}
       </Text>
-      {member.role === "host" && <Text style={styles.hostTag}>Host</Text>}
       {isHost && member.id !== user?.id && (
-        <Pressable
-          testID={`room-role-btn-${member.id}`}
-          style={styles.roleBtn}
-          onPress={() =>
-            changeRole(member, member.role === "listener" ? "speaker" : "listener")
-          }
-        >
-          <Text style={styles.roleBtnText}>
-            {member.role === "listener" ? "Invite to speak" : "Move to audience"}
-          </Text>
-        </Pressable>
+        <View style={styles.hostActions}>
+          <Pressable
+            testID={`room-role-btn-${member.id}`}
+            style={styles.roleBtn}
+            onPress={() =>
+              changeRole(member, member.role === "listener" ? "speaker" : "listener")
+            }
+            hitSlop={4}
+          >
+            <Ionicons
+              name={member.role === "listener" ? "arrow-up" : "arrow-down"}
+              size={13}
+              color={colors.onBrandTertiary}
+            />
+          </Pressable>
+          <Pressable
+            testID={`room-kick-btn-${member.id}`}
+            style={styles.kickBtn}
+            onPress={() => kickMember(member)}
+            hitSlop={4}
+          >
+            <Ionicons name="close" size={13} color={colors.error} />
+          </Pressable>
+        </View>
       )}
     </View>
   );
@@ -229,9 +266,94 @@ export default function RoomScreen() {
         behavior={Platform.OS === "ios" ? "padding" : undefined}
       >
         <View style={styles.stage}>
-          <Text style={styles.sectionLabel}>On stage</Text>
+          {host && (
+            <View style={styles.hostCard} testID="room-host-card">
+              <View>
+                <Avatar
+                  name={host.name}
+                  url={host.avatar_url}
+                  size={64}
+                  flagCode={countryToCode(host.country)}
+                />
+                <View
+                  style={[
+                    styles.micBadge,
+                    {
+                      backgroundColor: host.mic_on
+                        ? colors.success
+                        : colors.borderStrong,
+                    },
+                  ]}
+                >
+                  <Ionicons
+                    name={host.mic_on ? "mic" : "mic-off"}
+                    size={11}
+                    color="#FFF"
+                  />
+                </View>
+              </View>
+              <View style={{ flex: 1 }}>
+                <View style={styles.hostNameRow}>
+                  <Ionicons name="ribbon" size={14} color={colors.warning} />
+                  <Text style={styles.hostName} numberOfLines={1}>
+                    {host.id === user?.id ? "You" : host.name}
+                  </Text>
+                </View>
+                <Text style={styles.hostLabel}>Room Host</Text>
+              </View>
+              <View style={styles.hostBadge}>
+                <Text style={styles.hostBadgeText}>HOST</Text>
+              </View>
+            </View>
+          )}
+
+          {isHost && handRequests.length > 0 && (
+            <View style={styles.requestsCard} testID="hand-requests-panel">
+              <Text style={styles.requestsTitle}>
+                ✋ Stage requests · {handRequests.length}
+              </Text>
+              {handRequests.map((m) => (
+                <View key={m.id} style={styles.requestRow}>
+                  <Avatar
+                    name={m.name}
+                    url={m.avatar_url}
+                    size={32}
+                    flagCode={countryToCode(m.country)}
+                  />
+                  <Text style={styles.requestName} numberOfLines={1}>
+                    {m.name}
+                  </Text>
+                  <Pressable
+                    testID={`hand-accept-${m.id}`}
+                    style={styles.acceptBtn}
+                    onPress={() => changeRole(m, "speaker")}
+                  >
+                    <Text style={styles.acceptText}>Accept</Text>
+                  </Pressable>
+                  <Pressable
+                    testID={`hand-dismiss-${m.id}`}
+                    style={styles.dismissBtn}
+                    onPress={() => dismissHand(m)}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="close" size={16} color={colors.error} />
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+
+          <Text style={styles.sectionLabel}>
+            On stage · {speakers.length + (host ? 1 : 0)}
+          </Text>
           <View style={styles.memberGrid}>
-            {speakers.map((m) => renderMember(m, 56))}
+            {speakers.length === 0 ? (
+              <Text style={styles.stageEmpty}>
+                Stage is open — raise your hand to join!
+              </Text>
+            ) : (
+              speakers.map((m) => renderMember(m, 56))
+            )}
           </View>
           {listeners.length > 0 && (
             <>
@@ -434,27 +556,111 @@ const makeStyles = (colors: ThemeColors) =>
       color: colors.onSurface,
       maxWidth: 76,
     },
-    hostTag: {
+    hostCard: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      backgroundColor: colors.brandTertiary,
+      borderRadius: radius.md,
+      padding: spacing.md,
+    },
+    hostNameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+    },
+    hostName: {
+      fontFamily: fonts.displaySemi,
+      fontSize: 16,
+      color: colors.onBrandTertiary,
+      flexShrink: 1,
+    },
+    hostLabel: {
+      fontFamily: fonts.text,
+      fontSize: 12,
+      color: colors.onBrandTertiary,
+      opacity: 0.8,
+      marginTop: 1,
+    },
+    hostBadge: {
+      backgroundColor: colors.brand,
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 3,
+    },
+    hostBadgeText: {
       fontFamily: fonts.textBold,
       fontSize: 10,
-      color: colors.onBrandTertiary,
-      backgroundColor: colors.brandTertiary,
-      paddingHorizontal: 6,
-      paddingVertical: 1,
+      color: colors.onBrand,
+      letterSpacing: 0.8,
+    },
+    requestsCard: {
+      backgroundColor: colors.surface,
+      borderRadius: radius.md,
+      padding: spacing.md,
+      gap: spacing.sm,
+      borderWidth: 1,
+      borderColor: colors.warning,
+    },
+    requestsTitle: {
+      fontFamily: fonts.textBold,
+      fontSize: 12,
+      color: colors.onSurface,
+    },
+    requestRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    requestName: {
+      flex: 1,
+      fontFamily: fonts.textSemi,
+      fontSize: 13,
+      color: colors.onSurface,
+    },
+    acceptBtn: {
+      backgroundColor: colors.brand,
       borderRadius: radius.pill,
-      overflow: "hidden",
+      paddingHorizontal: spacing.md,
+      paddingVertical: 4,
+    },
+    acceptText: {
+      fontFamily: fonts.textBold,
+      fontSize: 12,
+      color: colors.onBrand,
+    },
+    dismissBtn: {
+      width: 26,
+      height: 26,
+      borderRadius: 13,
+      backgroundColor: colors.surfaceSecondary,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    stageEmpty: {
+      fontFamily: fonts.text,
+      fontSize: 13,
+      color: colors.onSurfaceSecondary,
+    },
+    hostActions: {
+      flexDirection: "row",
+      gap: 4,
     },
     roleBtn: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
       backgroundColor: colors.brandTertiary,
-      borderRadius: radius.pill,
-      paddingHorizontal: spacing.sm,
-      paddingVertical: 2,
+      alignItems: "center",
+      justifyContent: "center",
     },
-    roleBtnText: {
-      fontFamily: fonts.textBold,
-      fontSize: 9,
-      color: colors.onBrandTertiary,
-      textAlign: "center",
+    kickBtn: {
+      width: 24,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: "rgba(239, 68, 68, 0.12)",
+      alignItems: "center",
+      justifyContent: "center",
     },
     chatSection: {
       flex: 1,
