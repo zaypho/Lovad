@@ -123,6 +123,8 @@ DEMO_USERS = [
         "learning_language": "es",
         "teach_languages": [],
         "learning_languages": ["es", "fr", "zh"],
+        "gender": "male",
+        "is_vip": True,
         "proficiency": "Beginner",
         "bio": "Just here exploring LinguaConnect!",
         "avatar_url": "https://i.pravatar.cc/150?img=68",
@@ -148,6 +150,8 @@ async def seed():
         u.setdefault("teach_languages", [])
         u.setdefault("learning_languages", [u["learning_language"]])
         u.setdefault("age", 21 + (i * 2) % 15)
+        u.setdefault("gender", "female" if i % 2 else "male")
+        u.setdefault("is_vip", i % 3 == 0)
         u.setdefault(
             "interests",
             [DEMO_INTERESTS[(i + j) % len(DEMO_INTERESTS)] for j in range(4)],
@@ -164,6 +168,10 @@ async def seed():
                 lang_updates["age"] = u["age"]
             if "interests" not in existing:
                 lang_updates["interests"] = u["interests"]
+            if "gender" not in existing:
+                lang_updates["gender"] = u["gender"]
+            if "is_vip" not in existing:
+                lang_updates["is_vip"] = u["is_vip"]
             if lang_updates:
                 await users_col.update_one(
                     {"_id": existing["_id"]}, {"$set": lang_updates}

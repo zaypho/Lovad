@@ -5,12 +5,13 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 
 from auth_utils import CurrentUser
-from db import audio_col, conversations_col, media_col, messages_col, users_col
+from db import audio_col, conversations_col, follows_col, media_col, messages_col, users_col
 from models import (
     ConversationCreate,
     ImageMessageCreate,
     MessageCreate,
     VoiceMessageCreate,
+    apply_privacy,
     user_card,
 )
 from ws_manager import manager
@@ -39,6 +40,7 @@ async def conversation_public(doc: dict, viewer_id: str) -> dict:
     if partner:
         partner_card = user_card(partner)
         partner_card["is_online"] = manager.is_online(partner_id)
+        apply_privacy(partner_card, partner)
     return {
         "id": doc["_id"],
         "partner": partner_card,
@@ -67,6 +69,26 @@ async def create_or_get_conversation(body: ConversationCreate, current_user: Cur
     )
     if existing:
         return await conversation_public(existing, current_user["_id"])
+    # Free users can start chats with up to 10 people; mutual follows are exempt.
+    if not current_user.get("is_vip"):
+        conv_count = await conversations_col.count_documents(
+            {"participant_ids": current_user["_id"]}
+        )
+        if conv_count >= 10:
+            i_follow = await follows_col.find_one(
+                {"follower_id": current_user["_id"], "following_id": body.partner_id}
+            )
+            follows_me = await follows_col.find_one(
+                {"follower_id": body.partner_id, "following_id": current_user["_id"]}
+            )
+            if not (i_follow and follows_me):
+                raise HTTPException(
+                    status_code=403,
+                    detail=(
+                        "Free users can message up to 10 people. "
+                        "Follow each other to chat, or upgrade to VIP."
+                    ),
+                )
     now = datetime.now(timezone.utc).isoformat()
     doc = {
         "_id": str(uuid.uuid4()),

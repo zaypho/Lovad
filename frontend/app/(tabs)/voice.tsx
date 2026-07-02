@@ -20,7 +20,8 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "@/src/components/Avatar";
 import { FlagIcon } from "@/src/components/FlagIcon";
 import { countryToCode } from "@/src/constants/countries";
-import { LANGUAGES, langName } from "@/src/constants/languages";
+import { langName } from "@/src/constants/languages";
+import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
 import { api, Room } from "@/src/utils/api";
@@ -28,6 +29,7 @@ import { timeAgo } from "@/src/utils/time";
 
 export default function Voice() {
   const router = useRouter();
+  const { user } = useAuth();
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -35,7 +37,32 @@ export default function Voice() {
   const [creating, setCreating] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [title, setTitle] = useState("");
-  const [language, setLanguage] = useState<string>("en");
+  const [roomLangs, setRoomLangs] = useState<string[]>([]);
+
+  // Room languages come from the user's own languages (native + teach + learning).
+  const myLangs = Array.from(
+    new Set(
+      [
+        user?.native_language,
+        ...(user?.teach_languages || []),
+        ...(user?.learning_languages?.length
+          ? user.learning_languages
+          : user?.learning_language
+            ? [user.learning_language]
+            : []),
+      ].filter(Boolean) as string[],
+    ),
+  );
+
+  const toggleRoomLang = (code: string) => {
+    setRoomLangs((prev) =>
+      prev.includes(code)
+        ? prev.filter((c) => c !== code)
+        : prev.length >= 2
+          ? prev
+          : [...prev, code],
+    );
+  };
 
   const load = useCallback(async () => {
     try {
@@ -57,16 +84,18 @@ export default function Voice() {
   );
 
   const createRoom = async () => {
-    if (!title.trim() || creating) return;
+    if (!title.trim() || creating || roomLangs.length === 0) return;
     setCreating(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     try {
       const room = await api.post<Room>("/rooms", {
         title: title.trim(),
-        language,
+        language: roomLangs[0],
+        languages: roomLangs,
       });
       setModalOpen(false);
       setTitle("");
+      setRoomLangs([]);
       router.push(`/room/${room.id}`);
     } catch {
       // keep modal open for retry
@@ -126,8 +155,14 @@ export default function Voice() {
                   <Text style={styles.liveText}>LIVE</Text>
                 </View>
                 <View style={styles.langBadge}>
-                  <FlagIcon code={item.language} size={14} />
-                  <Text style={styles.langText}>{langName(item.language)}</Text>
+                  {(item.languages?.length ? item.languages : [item.language]).map(
+                    (c) => (
+                      <React.Fragment key={c}>
+                        <FlagIcon code={c} size={14} />
+                        <Text style={styles.langText}>{langName(c)}</Text>
+                      </React.Fragment>
+                    ),
+                  )}
                 </View>
               </View>
               <Text style={styles.cardTitle}>{item.title}</Text>
@@ -191,26 +226,28 @@ export default function Voice() {
               onChangeText={setTitle}
               maxLength={80}
             />
-            <Text style={styles.modalLabel}>Room language</Text>
+            <Text style={styles.modalLabel}>
+              Room languages ({roomLangs.length}/2) — from your languages
+            </Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={{ gap: spacing.sm }}
             >
-              {LANGUAGES.slice(0, 12).map((lang) => {
-                const active = language === lang.code;
+              {myLangs.map((code) => {
+                const active = roomLangs.includes(code);
                 return (
                   <Pressable
-                    key={lang.code}
-                    testID={`room-lang-${lang.code}`}
-                    onPress={() => setLanguage(lang.code)}
+                    key={code}
+                    testID={`room-lang-${code}`}
+                    onPress={() => toggleRoomLang(code)}
                     style={[styles.langChip, active && styles.langChipActive]}
                   >
-                    <FlagIcon code={lang.code} size={16} />
+                    <FlagIcon code={code} size={16} />
                     <Text
                       style={[styles.langChipText, active && styles.langChipTextActive]}
                     >
-                      {lang.name}
+                      {langName(code)}
                     </Text>
                   </Pressable>
                 );
@@ -218,8 +255,13 @@ export default function Voice() {
             </ScrollView>
             <Pressable
               testID="room-create-submit-btn"
-              style={[styles.createBtn, (!title.trim() || creating) && { opacity: 0.4 }]}
-              disabled={!title.trim() || creating}
+              style={[
+                styles.createBtn,
+                (!title.trim() || roomLangs.length === 0 || creating) && {
+                  opacity: 0.4,
+                },
+              ]}
+              disabled={!title.trim() || roomLangs.length === 0 || creating}
               onPress={createRoom}
             >
               {creating ? (

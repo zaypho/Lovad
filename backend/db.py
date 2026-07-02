@@ -20,6 +20,8 @@ room_messages_col = db["room_messages"]
 audio_col = db["audio_files"]
 media_col = db["media_files"]
 profile_visits_col = db["profile_visits"]
+notifications_col = db["notifications"]
+follows_col = db["follows"]
 
 
 async def ensure_indexes():
@@ -34,3 +36,9 @@ async def ensure_indexes():
         [("visitor_id", 1), ("visited_user_id", 1)], unique=True
     )
     await profile_visits_col.create_index([("visited_user_id", 1), ("visited_at", -1)])
+    await notifications_col.create_index([("user_id", 1), ("created_at", -1)])
+    await notifications_col.create_index([("user_id", 1), ("read", 1)])
+    await follows_col.create_index(
+        [("follower_id", 1), ("following_id", 1)], unique=True
+    )
+    await follows_col.create_index([("following_id", 1)])

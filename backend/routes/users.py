@@ -5,8 +5,8 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, HTTPException
 
 from auth_utils import CurrentUser
-from db import media_col, profile_visits_col, users_col
-from models import AvatarUpload, UserUpdate, user_card, user_public
+from db import follows_col, media_col, profile_visits_col, users_col
+from models import AvatarUpload, UserUpdate, apply_privacy, user_card, user_public
 from ws_manager import manager
 
 router = APIRouter(prefix="/users", tags=["users"])
@@ -15,14 +15,37 @@ router = APIRouter(prefix="/users", tags=["users"])
 @router.put("/me")
 async def update_me(body: UserUpdate, current_user: CurrentUser):
     updates = {k: v for k, v in body.model_dump().items() if v is not None}
-    # Country and age are set once at signup and cannot be changed afterwards.
+    # Country, age and gender are set once at signup and cannot be changed afterwards.
     if current_user.get("country") and "country" in updates:
         updates.pop("country")
     if current_user.get("age") and "age" in updates:
         updates.pop("age")
+    if current_user.get("gender") and "gender" in updates:
+        updates.pop("gender")
+    # Non-VIP users: 1 native + 1 learning language only (no extra teach languages).
+    if not current_user.get("is_vip"):
+        if updates.get("learning_languages") is not None:
+            updates["learning_languages"] = updates["learning_languages"][:1]
+            updates["learning_language"] = (
+                updates["learning_languages"][0]
+                if updates["learning_languages"]
+                else None
+            )
+        if updates.get("teach_languages"):
+            updates["teach_languages"] = []
     if updates:
         await users_col.update_one({"_id": current_user["_id"]}, {"$set": updates})
         current_user.update(updates)
+    return user_public(current_user)
+
+
+@router.post("/me/vip")
+async def upgrade_vip(current_user: CurrentUser):
+    """Free VIP upgrade (payment can be added later)."""
+    await users_col.update_one(
+        {"_id": current_user["_id"]}, {"$set": {"is_vip": True}}
+    )
+    current_user["is_vip"] = True
     return user_public(current_user)
 
 
@@ -62,8 +85,88 @@ async def my_visitors(current_user: CurrentUser):
             card = user_card(u)
             card["visited_at"] = d["visited_at"]
             card["is_online"] = manager.is_online(u["_id"])
-            visitors.append(card)
+            visitors.append(apply_privacy(card, u))
     return {"count": len(visitors), "visitors": visitors}
+
+
+@router.get("/me/visited")
+async def my_visited(current_user: CurrentUser):
+    """Profiles I have visited, most recent first."""
+    docs = (
+        await profile_visits_col.find({"visitor_id": current_user["_id"]})
+        .sort("visited_at", -1)
+        .to_list(100)
+    )
+    ids = [d["visited_user_id"] for d in docs]
+    users = await users_col.find({"_id": {"$in": ids}}).to_list(200)
+    umap = {u["_id"]: u for u in users}
+    visited = []
+    for d in docs:
+        u = umap.get(d["visited_user_id"])
+        if u:
+            card = user_card(u)
+            card["visited_at"] = d["visited_at"]
+            card["is_online"] = manager.is_online(u["_id"])
+            visited.append(apply_privacy(card, u))
+    return {"count": len(visited), "visitors": visited}
+
+
+async def _follow_cards(ids: list) -> list:
+    users = await users_col.find({"_id": {"$in": ids}}).to_list(200)
+    umap = {u["_id"]: u for u in users}
+    cards = []
+    for uid in ids:
+        u = umap.get(uid)
+        if u:
+            card = user_card(u)
+            card["is_online"] = manager.is_online(uid)
+            cards.append(apply_privacy(card, u))
+    return cards
+
+
+@router.get("/me/followers")
+async def my_followers(current_user: CurrentUser):
+    docs = (
+        await follows_col.find({"following_id": current_user["_id"]})
+        .sort("created_at", -1)
+        .to_list(200)
+    )
+    return await _follow_cards([d["follower_id"] for d in docs])
+
+
+@router.get("/me/following")
+async def my_following(current_user: CurrentUser):
+    docs = (
+        await follows_col.find({"follower_id": current_user["_id"]})
+        .sort("created_at", -1)
+        .to_list(200)
+    )
+    return await _follow_cards([d["following_id"] for d in docs])
+
+
+@router.post("/{user_id}/follow")
+async def toggle_follow(user_id: str, current_user: CurrentUser):
+    if user_id == current_user["_id"]:
+        raise HTTPException(status_code=400, detail="You cannot follow yourself")
+    target = await users_col.find_one({"_id": user_id})
+    if not target:
+        raise HTTPException(status_code=404, detail="User not found")
+    key = {"follower_id": current_user["_id"], "following_id": user_id}
+    existing = await follows_col.find_one(key)
+    if existing:
+        await follows_col.delete_one(key)
+        following = False
+    else:
+        await follows_col.insert_one(
+            {
+                "_id": str(uuid.uuid4()),
+                **key,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+            }
+        )
+        following = True
+    followers_count = await follows_col.count_documents({"following_id": user_id})
+    return {"following": following, "followers_count": followers_count}
 
 
 @router.get("/partners")
@@ -114,7 +217,7 @@ async def list_partners(
     for d in docs:
         card = user_card(d)
         card["is_online"] = d["_id"] in online_ids
-        cards.append(card)
+        cards.append(apply_privacy(card, d))
     return cards
 
 
@@ -135,7 +238,23 @@ async def get_user(user_id: str, current_user: CurrentUser):
     public = user_public(doc)
     public.pop("email", None)
     public["is_online"] = manager.is_online(user_id)
-    public["profile_views"] = await profile_visits_col.count_documents(
-        {"visited_user_id": user_id}
+    public.pop("privacy", None)
+    if user_id != current_user["_id"]:
+        apply_privacy(public, doc)
+    public["followers_count"] = await follows_col.count_documents(
+        {"following_id": user_id}
+    )
+    public["following_count"] = await follows_col.count_documents(
+        {"follower_id": user_id}
+    )
+    public["is_following"] = bool(
+        await follows_col.find_one(
+            {"follower_id": current_user["_id"], "following_id": user_id}
+        )
+    )
+    public["follows_me"] = bool(
+        await follows_col.find_one(
+            {"follower_id": user_id, "following_id": current_user["_id"]}
+        )
     )
     return public

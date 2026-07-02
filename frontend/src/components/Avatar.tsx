@@ -106,7 +106,7 @@ export const Avatar: React.FC<AvatarProps> = ({
             width: dotSize,
             height: dotSize,
             borderRadius: dotSize / 2,
-            backgroundColor: "#0EA5E9",
+            backgroundColor: "#22C55E",
             borderWidth: flagBorder,
             borderColor: colors.surface,
           }}

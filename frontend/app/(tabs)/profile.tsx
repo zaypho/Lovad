@@ -19,6 +19,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
+import { GenderBadge, VipBadge } from "@/src/components/Badges";
 import { FlagIcon } from "@/src/components/FlagIcon";
 import { LanguagePair } from "@/src/components/LanguagePair";
 import { countryToCode } from "@/src/constants/countries";
@@ -60,6 +61,15 @@ export default function Profile() {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [visitorCount, setVisitorCount] = useState<number | null>(null);
+  const [gender, setGender] = useState(user?.gender || null);
+  const [vipBusy, setVipBusy] = useState(false);
+  const [privacy, setPrivacy] = useState<Record<string, boolean>>(
+    user?.privacy || {},
+  );
+  const [social, setSocial] = useState<{
+    followers: number;
+    following: number;
+  } | null>(null);
 
   useFocusEffect(
     useCallback(() => {
@@ -69,7 +79,21 @@ export default function Profile() {
         .catch(() => {});
       api
         .get<User>("/auth/me")
-        .then(setUser)
+        .then((u) => {
+          setUser(u);
+          if (u.privacy) setPrivacy(u.privacy);
+          if (u.id) {
+            api
+              .get<User>(`/users/${u.id}`)
+              .then((d) =>
+                setSocial({
+                  followers: d.followers_count ?? 0,
+                  following: d.following_count ?? 0,
+                }),
+              )
+              .catch(() => {});
+          }
+        })
         .catch(() => {});
     }, [setUser]),
   );
@@ -95,6 +119,48 @@ export default function Profile() {
       LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     }
     setExpanded((prev) => (prev === key ? null : key));
+  };
+
+  const learnCap = user?.is_vip ? 3 : 1;
+
+  const toggleLearning = (code: string) => {
+    if (
+      !learningLangs.includes(code) &&
+      learningLangs.length >= learnCap &&
+      !user?.is_vip
+    ) {
+      Alert.alert(
+        "VIP feature",
+        "Free members can pick 1 learning language. Upgrade to VIP to learn up to 3!",
+      );
+      return;
+    }
+    toggleList(learningLangs, setLearningLangs, code, learnCap);
+  };
+
+  const upgradeVip = async () => {
+    if (vipBusy) return;
+    setVipBusy(true);
+    try {
+      const updated = await api.post<User>("/users/me/vip");
+      setUser(updated);
+      Alert.alert("VIP", "Welcome to VIP! You can now learn up to 3 languages.");
+    } catch {
+      Alert.alert("VIP", "Could not upgrade. Try again.");
+    } finally {
+      setVipBusy(false);
+    }
+  };
+
+  const togglePrivacy = async (key: string) => {
+    const next = { ...privacy, [key]: !(privacy[key] ?? true) };
+    setPrivacy(next);
+    try {
+      const updated = await api.put<User>("/users/me", { privacy: next });
+      setUser(updated);
+    } catch {
+      setPrivacy(privacy);
+    }
   };
 
   const pickAvatar = async () => {
@@ -153,6 +219,7 @@ export default function Profile() {
         learning_languages: learningLangs,
         learning_language: learningLangs[0] || null,
         proficiency,
+        gender,
         interests,
         age: !Number.isNaN(ageNum) && ageNum >= 13 && ageNum <= 120 ? ageNum : undefined,
       });
@@ -222,7 +289,11 @@ export default function Profile() {
               placeholderTextColor={colors.onSurfaceSecondary}
             />
           ) : (
-            <Text style={styles.name}>{user.name}</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>{user.name}</Text>
+              <GenderBadge gender={user.gender} />
+              {user.is_vip && <VipBadge />}
+            </View>
           )}
           <Text style={styles.email}>{user.email}</Text>
           <LanguagePair
@@ -270,7 +341,61 @@ export default function Profile() {
               <Text style={styles.statLabel}>Days Member</Text>
             </View>
           </View>
+          <View style={styles.statsRow}>
+            <Pressable
+              testID="profile-followers-stat"
+              style={styles.statCell}
+              onPress={() => router.push("/follows?tab=followers")}
+            >
+              <View style={styles.statValueRow}>
+                <Ionicons name="people" size={16} color={colors.brand} />
+                <Text style={styles.statValue}>{social?.followers ?? 0}</Text>
+              </View>
+              <Text style={styles.statLabel}>Followers</Text>
+            </Pressable>
+            <View style={styles.statDivider} />
+            <Pressable
+              testID="profile-following-stat"
+              style={styles.statCell}
+              onPress={() => router.push("/follows?tab=following")}
+            >
+              <View style={styles.statValueRow}>
+                <Ionicons name="person-add" size={16} color={colors.success} />
+                <Text style={styles.statValue}>{social?.following ?? 0}</Text>
+              </View>
+              <Text style={styles.statLabel}>Following</Text>
+            </Pressable>
+          </View>
         </View>
+
+        {user.is_vip ? (
+          <View style={styles.vipBanner} testID="vip-status-banner">
+            <Ionicons name="diamond" size={18} color="#B45309" />
+            <Text style={styles.vipBannerText}>
+              VIP member — 3 learning languages, unlimited chats & VIP badge
+            </Text>
+          </View>
+        ) : (
+          <Pressable
+            testID="vip-upgrade-btn"
+            style={styles.vipUpgradeBtn}
+            onPress={upgradeVip}
+            disabled={vipBusy}
+          >
+            <Ionicons name="diamond" size={20} color="#FFF" />
+            <View style={{ flex: 1 }}>
+              <Text style={styles.vipUpgradeTitle}>Upgrade to VIP — Free</Text>
+              <Text style={styles.vipUpgradeSub}>
+                3 learning languages · unlimited chats · VIP badge
+              </Text>
+            </View>
+            {vipBusy ? (
+              <ActivityIndicator color="#FFF" />
+            ) : (
+              <Ionicons name="chevron-forward" size={18} color="#FFF" />
+            )}
+          </Pressable>
+        )}
 
         <Text style={styles.groupLabel}>Profile details</Text>
         <View style={styles.section}>
@@ -358,6 +483,53 @@ export default function Profile() {
                 {user.age ? `${user.age} years old` : "Not set"}
               </Text>
               {user.age ? (
+                <Ionicons
+                  name="lock-closed"
+                  size={13}
+                  color={colors.onSurfaceSecondary}
+                />
+              ) : null}
+            </View>
+          )}
+        </View>
+
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Gender</Text>
+          {editing && !user.gender ? (
+            <View style={styles.chipWrap}>
+              {(["male", "female"] as const).map((g) => {
+                const active = gender === g;
+                return (
+                  <Pressable
+                    key={g}
+                    testID={`profile-gender-${g}`}
+                    onPress={() => setGender(g)}
+                    style={[styles.chip, active && styles.chipActive]}
+                  >
+                    <Ionicons
+                      name={g}
+                      size={14}
+                      color={g === "male" ? "#3B82F6" : "#EC4899"}
+                    />
+                    <Text
+                      style={[styles.chipText, active && styles.chipTextActive]}
+                    >
+                      {g === "male" ? "Male" : "Female"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : (
+            <View style={styles.lockedRow}>
+              <Text style={styles.bodyText}>
+                {user.gender
+                  ? user.gender === "male"
+                    ? "Male"
+                    : "Female"
+                  : "Not set"}
+              </Text>
+              {user.gender ? (
                 <Ionicons
                   name="lock-closed"
                   size={13}
@@ -481,7 +653,13 @@ export default function Profile() {
                   />
                 </View>
               </Pressable>
-              {expanded === "teach" && (
+              {expanded === "teach" && !user.is_vip && (
+                <Text style={styles.bodyText}>
+                  💎 VIP members can teach up to 2 extra languages. Upgrade to
+                  unlock!
+                </Text>
+              )}
+              {expanded === "teach" && user.is_vip && (
               <View style={styles.chipWrap}>
                 {LANGUAGES.filter((l) => l.code !== nativeLang).map((lang) => {
                   const active = teachLangs.includes(lang.code);
@@ -519,7 +697,7 @@ export default function Profile() {
                 onPress={() => toggleSection("learning")}
               >
                 <Text style={styles.sectionTitle}>
-                  Learning languages ({learningLangs.length}/3)
+                  Learning languages ({learningLangs.length}/{learnCap})
                 </Text>
                 <View style={styles.collapseRight}>
                   {learningLangs.map((c) => (
@@ -542,9 +720,7 @@ export default function Profile() {
                     <Pressable
                       key={lang.code}
                       testID={`profile-learning-${lang.code}`}
-                      onPress={() =>
-                        toggleList(learningLangs, setLearningLangs, lang.code, 3)
-                      }
+                      onPress={() => toggleLearning(lang.code)}
                       style={[styles.chip, active && styles.chipActive]}
                     >
                       <FlagIcon code={lang.code} size={14} />
@@ -589,6 +765,45 @@ export default function Profile() {
             </View>
           </>
         )}
+
+        <Text style={styles.groupLabel}>Privacy</Text>
+        <View style={styles.section}>
+          {(
+            [
+              { key: "show_online", label: "Show online status", icon: "radio-button-on" },
+              { key: "show_age", label: "Show my age", icon: "calendar" },
+              { key: "show_gender", label: "Show my gender", icon: "male-female" },
+              { key: "show_country", label: "Show my country & flag", icon: "flag" },
+              { key: "show_interests", label: "Show my interests", icon: "heart" },
+            ] as const
+          ).map((opt, idx, arr) => {
+            const on = privacy[opt.key] ?? true;
+            return (
+              <React.Fragment key={opt.key}>
+                <Pressable
+                  testID={`privacy-${opt.key}`}
+                  style={styles.settingRow}
+                  onPress={() => togglePrivacy(opt.key)}
+                >
+                  <View style={styles.settingIcon}>
+                    <Ionicons name={opt.icon} size={16} color={colors.brand} />
+                  </View>
+                  <Text style={[styles.settingTitle, { flex: 1 }]}>
+                    {opt.label}
+                  </Text>
+                  <View
+                    style={[styles.toggleTrack, on && styles.toggleTrackOn]}
+                  >
+                    <View
+                      style={[styles.toggleThumb, on && styles.toggleThumbOn]}
+                    />
+                  </View>
+                </Pressable>
+                {idx < arr.length - 1 && <View style={styles.settingDivider} />}
+              </React.Fragment>
+            );
+          })}
+        </View>
 
         <Text style={styles.groupLabel}>Settings</Text>
         <View style={styles.section}>
@@ -748,6 +963,66 @@ const makeStyles = (colors: ThemeColors) =>
       flexDirection: "row",
       alignItems: "center",
       justifyContent: "space-between",
+    },
+    nameRow: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 6,
+    },
+    vipBanner: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      backgroundColor: "#FEF3C7",
+      borderRadius: radius.md,
+      padding: spacing.lg,
+      marginTop: spacing.md,
+    },
+    vipBannerText: {
+      flex: 1,
+      fontFamily: fonts.textSemi,
+      fontSize: 13,
+      color: "#92400E",
+    },
+    vipUpgradeBtn: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.md,
+      backgroundColor: "#F59E0B",
+      borderRadius: radius.md,
+      padding: spacing.lg,
+      marginTop: spacing.md,
+    },
+    vipUpgradeTitle: {
+      fontFamily: fonts.textBold,
+      fontSize: 15,
+      color: "#FFFFFF",
+    },
+    vipUpgradeSub: {
+      fontFamily: fonts.text,
+      fontSize: 12,
+      color: "rgba(255,255,255,0.9)",
+      marginTop: 1,
+    },
+    toggleTrack: {
+      width: 42,
+      height: 24,
+      borderRadius: 12,
+      backgroundColor: colors.surfaceTertiary,
+      padding: 2,
+      justifyContent: "center",
+    },
+    toggleTrackOn: {
+      backgroundColor: colors.brand,
+    },
+    toggleThumb: {
+      width: 20,
+      height: 20,
+      borderRadius: 10,
+      backgroundColor: "#FFFFFF",
+    },
+    toggleThumbOn: {
+      marginLeft: 18,
     },
     collapseHeader: {
       flexDirection: "row",

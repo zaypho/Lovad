@@ -57,7 +57,14 @@ export interface User {
   learning_languages?: string[];
   age?: number | null;
   interests?: string[];
+  gender?: "male" | "female" | null;
+  is_vip?: boolean;
+  privacy?: Record<string, boolean>;
   is_online?: boolean;
+  followers_count?: number;
+  following_count?: number;
+  is_following?: boolean;
+  follows_me?: boolean;
   streak_count?: number;
   profile_views?: number;
   created_at?: string | null;
@@ -117,6 +124,7 @@ export interface Room {
   id: string;
   title: string;
   language: string;
+  languages?: string[];
   host: User | null;
   is_live?: boolean;
   members?: RoomMember[];

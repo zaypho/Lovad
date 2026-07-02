@@ -4,7 +4,9 @@ import { useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   FlatList,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,17 +17,18 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
+import { GenderBadge, VipBadge } from "@/src/components/Badges";
 import { FlagIcon } from "@/src/components/FlagIcon";
 import { LanguagePair } from "@/src/components/LanguagePair";
 import { countryToCode } from "@/src/constants/countries";
-import { langName } from "@/src/constants/languages";
+import { LANGUAGES, langName } from "@/src/constants/languages";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
 import { api, Conversation, User } from "@/src/utils/api";
 
 export default function Connect() {
-  const { user } = useAuth();
+  const { user, setUser } = useAuth();
   const router = useRouter();
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
@@ -63,10 +66,17 @@ export default function Connect() {
         partner_id: partner.id,
       });
       router.push(`/chat/${conv.id}`);
-    } catch {
-      // navigation failed silently is acceptable; partner card remains
+    } catch (e) {
+      Alert.alert(
+        "Message limit",
+        e instanceof Error ? e.message : "Could not start the chat.",
+      );
     }
   };
+
+  const [addLangOpen, setAddLangOpen] = useState(false);
+  const [addingLang, setAddingLang] = useState(false);
+  const [vipBusy, setVipBusy] = useState(false);
 
   const myLearning = (
     user?.learning_languages?.length
@@ -80,6 +90,39 @@ export default function Connect() {
     { key: "match", label: "Best Match" },
     ...myLearning.map((c) => ({ key: c, label: langName(c) })),
   ];
+
+  const needsVipForMore = !user?.is_vip && myLearning.length >= 1;
+
+  const addLanguage = async (code: string) => {
+    if (addingLang) return;
+    setAddingLang(true);
+    try {
+      const next = [...myLearning, code].slice(0, 3);
+      const updated = await api.put<User>("/users/me", {
+        learning_languages: next,
+        learning_language: next[0],
+      });
+      setUser(updated);
+      setAddLangOpen(false);
+    } catch {
+      Alert.alert("Language", "Could not add the language. Try again.");
+    } finally {
+      setAddingLang(false);
+    }
+  };
+
+  const upgradeVip = async () => {
+    if (vipBusy) return;
+    setVipBusy(true);
+    try {
+      const updated = await api.post<User>("/users/me/vip");
+      setUser(updated);
+    } catch {
+      Alert.alert("VIP", "Could not upgrade. Try again.");
+    } finally {
+      setVipBusy(false);
+    }
+  };
 
   return (
     <SafeAreaView style={styles.container} edges={["top"]} testID="connect-screen">
@@ -131,6 +174,15 @@ export default function Connect() {
               </Pressable>
             );
           })}
+          {myLearning.length < 3 && (
+            <Pressable
+              testID="connect-add-language-btn"
+              onPress={() => setAddLangOpen(true)}
+              style={[styles.filterChip, styles.addChip]}
+            >
+              <Ionicons name="add" size={16} color={colors.brand} />
+            </Pressable>
+          )}
         </ScrollView>
       </View>
 
@@ -180,6 +232,8 @@ export default function Connect() {
                   <Text style={styles.cardName} numberOfLines={1}>
                     {item.name}
                   </Text>
+                  <GenderBadge gender={item.gender} size={11} />
+                  {item.is_vip && <VipBadge small />}
                 </View>
                 <LanguagePair
                   native={item.native_language}
@@ -210,6 +264,76 @@ export default function Connect() {
           )}
         />
       )}
+
+      <Modal
+        visible={addLangOpen}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setAddLangOpen(false)}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.modalCard}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>
+                {needsVipForMore ? "VIP Feature" : "Add a learning language"}
+              </Text>
+              <Pressable
+                testID="add-lang-close-btn"
+                onPress={() => setAddLangOpen(false)}
+              >
+                <Ionicons name="close" size={24} color={colors.onSurfaceSecondary} />
+              </Pressable>
+            </View>
+            {needsVipForMore ? (
+              <View style={{ gap: spacing.lg }}>
+                <Text style={styles.vipUpsellText}>
+                  💎 Free members can learn 1 language. Upgrade to VIP to learn
+                  up to 3 languages, chat without limits and get a VIP badge!
+                </Text>
+                <Pressable
+                  testID="connect-vip-upgrade-btn"
+                  style={styles.vipBtn}
+                  onPress={upgradeVip}
+                  disabled={vipBusy}
+                >
+                  {vipBusy ? (
+                    <ActivityIndicator color="#FFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="diamond" size={18} color="#FFF" />
+                      <Text style={styles.vipBtnText}>
+                        Upgrade to VIP — Free
+                      </Text>
+                    </>
+                  )}
+                </Pressable>
+              </View>
+            ) : (
+              <ScrollView style={{ maxHeight: 320 }}>
+                <View style={styles.langGrid}>
+                  {LANGUAGES.filter(
+                    (l) =>
+                      l.code !== user?.native_language &&
+                      !(user?.teach_languages || []).includes(l.code) &&
+                      !myLearning.includes(l.code),
+                  ).map((lang) => (
+                    <Pressable
+                      key={lang.code}
+                      testID={`add-lang-${lang.code}`}
+                      onPress={() => addLanguage(lang.code)}
+                      disabled={addingLang}
+                      style={styles.langOption}
+                    >
+                      <FlagIcon code={lang.code} size={18} />
+                      <Text style={styles.langOptionText}>{lang.name}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -266,6 +390,74 @@ const makeStyles = (colors: ThemeColors) =>
     paddingVertical: spacing.sm,
     borderRadius: radius.pill,
     backgroundColor: colors.surface,
+  },
+  addChip: {
+    paddingHorizontal: spacing.md,
+    borderWidth: 1.5,
+    borderColor: colors.brand,
+    borderStyle: "dashed",
+  },
+  modalBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  modalCard: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: radius.lg,
+    borderTopRightRadius: radius.lg,
+    padding: spacing.xl,
+    gap: spacing.lg,
+    paddingBottom: spacing.xxl,
+  },
+  modalHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  modalTitle: {
+    fontFamily: fonts.display,
+    fontSize: 19,
+    color: colors.onSurface,
+  },
+  vipUpsellText: {
+    fontFamily: fonts.text,
+    fontSize: 14,
+    lineHeight: 21,
+    color: colors.onSurfaceTertiary,
+  },
+  vipBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: "#F59E0B",
+    borderRadius: radius.pill,
+    paddingVertical: spacing.lg,
+  },
+  vipBtnText: {
+    fontFamily: fonts.textBold,
+    fontSize: 15,
+    color: "#FFFFFF",
+  },
+  langGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: spacing.sm,
+  },
+  langOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: radius.pill,
+    backgroundColor: colors.surfaceSecondary,
+  },
+  langOptionText: {
+    fontFamily: fonts.textSemi,
+    fontSize: 13,
+    color: colors.onSurfaceTertiary,
   },
   filterChipActive: {
     backgroundColor: colors.brand,

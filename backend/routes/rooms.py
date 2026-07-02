@@ -25,6 +25,7 @@ async def room_detail(doc: dict) -> dict:
         "id": doc["_id"],
         "title": doc["title"],
         "language": doc["language"],
+        "languages": doc.get("languages") or [doc["language"]],
         "host": user_card(host) if host else None,
         "is_live": doc["is_live"],
         "members": members,
@@ -38,6 +39,7 @@ def room_summary(doc: dict, host: dict | None) -> dict:
         "id": doc["_id"],
         "title": doc["title"],
         "language": doc["language"],
+        "languages": doc.get("languages") or [doc["language"]],
         "host": user_card(host) if host else None,
         "member_count": len(doc.get("members", {})),
         "created_at": doc["created_at"],
@@ -71,10 +73,12 @@ async def list_rooms(current_user: CurrentUser):
 
 @router.post("", status_code=201)
 async def create_room(body: RoomCreate, current_user: CurrentUser):
+    languages = (body.languages or [body.language])[:2]
     doc = {
         "_id": str(uuid.uuid4()),
         "title": body.title.strip(),
-        "language": body.language,
+        "language": languages[0],
+        "languages": languages,
         "host_id": current_user["_id"],
         "is_live": True,
         "members": {

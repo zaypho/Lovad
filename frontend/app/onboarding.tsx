@@ -1,3 +1,4 @@
+import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useRouter } from "expo-router";
 import React, { useState } from "react";
@@ -23,16 +24,15 @@ import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, spacing, ThemeColors } from "@/src/theme";
 import { api, User } from "@/src/utils/api";
 
-const MAX_TEACH = 2;
-const MAX_LEARN = 3;
+const MAX_LEARN = 1; // new accounts start as free users — VIP unlocks 3
 
 export default function Onboarding() {
   const [step, setStep] = useState(0);
   const [nativeLang, setNativeLang] = useState<string | null>(null);
-  const [teachLangs, setTeachLangs] = useState<string[]>([]);
   const [learnLangs, setLearnLangs] = useState<string[]>([]);
   const [country, setCountry] = useState<string | null>(null);
   const [age, setAge] = useState("");
+  const [gender, setGender] = useState<"male" | "female" | null>(null);
   const [interests, setInterests] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -47,12 +47,8 @@ export default function Onboarding() {
       subtitle: "You'll help others learn it.",
     },
     {
-      title: "Other languages you can teach?",
-      subtitle: `Optional — pick up to ${MAX_TEACH} more languages you speak well.`,
-    },
-    {
-      title: "Which languages do you want to learn?",
-      subtitle: `Pick up to ${MAX_LEARN}. We'll match you with native speakers.`,
+      title: "Which language do you want to learn?",
+      subtitle: "Pick one — VIP members can learn up to 3 languages.",
     },
     {
       title: "Where are you from?",
@@ -61,6 +57,10 @@ export default function Onboarding() {
     {
       title: "How old are you?",
       subtitle: "Shown on your profile. This can't be changed later.",
+    },
+    {
+      title: "You are?",
+      subtitle: "Shown next to your name. This can't be changed later.",
     },
     {
       title: "What do you love?",
@@ -74,10 +74,10 @@ export default function Onboarding() {
 
   const canContinue =
     (step === 0 && !!nativeLang) ||
-    step === 1 ||
-    (step === 2 && learnLangs.length > 0) ||
-    (step === 3 && !!country) ||
-    (step === 4 && ageValid) ||
+    (step === 1 && learnLangs.length > 0) ||
+    (step === 2 && !!country) ||
+    (step === 3 && ageValid) ||
+    (step === 4 && !!gender) ||
     (step === 5 && interests.length > 0);
 
   const toggleIn = (
@@ -103,11 +103,11 @@ export default function Onboarding() {
     try {
       const updated = await api.put<User>("/users/me", {
         native_language: nativeLang,
-        teach_languages: teachLangs,
         learning_languages: learnLangs,
         learning_language: learnLangs[0],
         country: COUNTRIES.find((c) => c.code === country)?.name,
         age: ageNum,
+        gender,
         interests,
       });
       setUser(updated);
@@ -175,19 +175,12 @@ export default function Onboarding() {
             )}
           {step === 1 &&
             renderLangGrid(
-              (c) => teachLangs.includes(c),
-              (c) => toggleIn(teachLangs, setTeachLangs, c, MAX_TEACH),
-              nativeLang ? [nativeLang] : [],
-              "onboarding-teach",
-            )}
-          {step === 2 &&
-            renderLangGrid(
               (c) => learnLangs.includes(c),
               (c) => toggleIn(learnLangs, setLearnLangs, c, MAX_LEARN),
-              [nativeLang, ...teachLangs].filter(Boolean) as string[],
+              nativeLang ? [nativeLang] : [],
               "onboarding-learn",
             )}
-          {step === 3 && (
+          {step === 2 && (
             <View style={styles.grid}>
               {COUNTRIES.map((c) => {
                 const active = country === c.code;
@@ -213,7 +206,7 @@ export default function Onboarding() {
               })}
             </View>
           )}
-          {step === 4 && (
+          {step === 3 && (
             <View style={styles.ageBox}>
               <TextInput
                 testID="onboarding-age-input"
@@ -228,6 +221,32 @@ export default function Onboarding() {
               <Text style={styles.ageHint}>
                 {age && !ageValid ? "Enter an age between 13 and 120" : "years old"}
               </Text>
+            </View>
+          )}
+          {step === 4 && (
+            <View style={styles.genderRow}>
+              {(["male", "female"] as const).map((g) => {
+                const active = gender === g;
+                return (
+                  <Pressable
+                    key={g}
+                    testID={`onboarding-gender-${g}`}
+                    onPress={() => setGender(g)}
+                    style={[styles.genderCard, active && styles.langChipActive]}
+                  >
+                    <Ionicons
+                      name={g}
+                      size={44}
+                      color={g === "male" ? "#3B82F6" : "#EC4899"}
+                    />
+                    <Text
+                      style={[styles.langName, active && styles.langNameActive]}
+                    >
+                      {g === "male" ? "Male" : "Female"}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </View>
           )}
           {step === 5 && (
@@ -286,12 +305,8 @@ export default function Onboarding() {
               <ActivityIndicator color={colors.onBrand} />
             ) : (
               <Text style={styles.continueText}>
-                {step === lastStep
-                  ? "Start Connecting"
-                  : step === 1 && teachLangs.length === 0
-                    ? "Skip"
-                    : "Continue"}
-              </Text>
+              {step === lastStep ? "Start Connecting" : "Continue"}
+            </Text>
             )}
           </Pressable>
         </View>
@@ -372,6 +387,21 @@ const makeStyles = (colors: ThemeColors) =>
       alignItems: "center",
       gap: spacing.md,
       paddingVertical: spacing.xl,
+    },
+    genderRow: {
+      flexDirection: "row",
+      gap: spacing.lg,
+      paddingVertical: spacing.xl,
+    },
+    genderCard: {
+      flex: 1,
+      alignItems: "center",
+      gap: spacing.md,
+      paddingVertical: spacing.xxl,
+      borderRadius: radius.md,
+      backgroundColor: colors.surfaceSecondary,
+      borderWidth: 2,
+      borderColor: "transparent",
     },
     ageInput: {
       width: 140,

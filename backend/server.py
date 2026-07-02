@@ -20,6 +20,7 @@ from routes.auth import router as auth_router  # noqa: E402
 from routes.chats import router as chats_router  # noqa: E402
 from routes.media import router as media_router  # noqa: E402
 from routes.moments import router as moments_router  # noqa: E402
+from routes.notifications import router as notifications_router  # noqa: E402
 from routes.rooms import router as rooms_router  # noqa: E402
 from routes.users import router as users_router  # noqa: E402
 from ws_manager import manager  # noqa: E402
@@ -101,6 +102,7 @@ for router in (
     rooms_router,
     audio_router,
     media_router,
+    notifications_router,
 ):
     app.include_router(router, prefix="/api")
 

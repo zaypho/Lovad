@@ -4,6 +4,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -13,6 +14,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Avatar } from "@/src/components/Avatar";
+import { GenderBadge, VipBadge } from "@/src/components/Badges";
 import { LanguagePair } from "@/src/components/LanguagePair";
 import { countryToCode } from "@/src/constants/countries";
 import { langName } from "@/src/constants/languages";
@@ -25,6 +27,7 @@ export default function UserProfile() {
   const router = useRouter();
   const [profile, setProfile] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [followBusy, setFollowBusy] = useState(false);
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
 
@@ -36,8 +39,38 @@ export default function UserProfile() {
   }, [id]);
 
   const message = async () => {
-    const conv = await api.post<Conversation>("/chats", { partner_id: id });
-    router.push(`/chat/${conv.id}`);
+    try {
+      const conv = await api.post<Conversation>("/chats", { partner_id: id });
+      router.push(`/chat/${conv.id}`);
+    } catch (e) {
+      Alert.alert(
+        "Message limit",
+        e instanceof Error ? e.message : "Could not start the chat.",
+      );
+    }
+  };
+
+  const toggleFollow = async () => {
+    if (followBusy) return;
+    setFollowBusy(true);
+    try {
+      const res = await api.post<{ following: boolean; followers_count: number }>(
+        `/users/${id}/follow`,
+      );
+      setProfile((prev) =>
+        prev
+          ? {
+              ...prev,
+              is_following: res.following,
+              followers_count: res.followers_count,
+            }
+          : prev,
+      );
+    } catch {
+      // retry on next tap
+    } finally {
+      setFollowBusy(false);
+    }
   };
 
   return (
@@ -65,7 +98,11 @@ export default function UserProfile() {
               flagCode={countryToCode(profile.country)}
               online={profile.is_online}
             />
-            <Text style={styles.name}>{profile.name}</Text>
+            <View style={styles.nameRow}>
+              <Text style={styles.name}>{profile.name}</Text>
+              <GenderBadge gender={profile.gender} />
+              {profile.is_vip && <VipBadge />}
+            </View>
             {profile.country && (
               <Text style={styles.country}>
                 {profile.country}
@@ -97,12 +134,14 @@ export default function UserProfile() {
                 <Text style={styles.statLabel}>Day Streak</Text>
               </View>
               <View style={styles.statDivider} />
-              <View style={styles.statCell} testID="user-views-stat">
+              <View style={styles.statCell} testID="user-followers-stat">
                 <View style={styles.statValueRow}>
-                  <Ionicons name="eye" size={16} color={colors.brand} />
-                  <Text style={styles.statValue}>{profile.profile_views ?? 0}</Text>
+                  <Ionicons name="people" size={16} color={colors.brand} />
+                  <Text style={styles.statValue}>
+                    {profile.followers_count ?? 0}
+                  </Text>
                 </View>
-                <Text style={styles.statLabel}>Profile Views</Text>
+                <Text style={styles.statLabel}>Followers</Text>
               </View>
               <View style={styles.statDivider} />
               <View style={styles.statCell} testID="user-days-stat">
@@ -139,14 +178,39 @@ export default function UserProfile() {
             </View>
           )}
 
-          <Pressable
-            testID="user-profile-message-btn"
-            style={styles.messageBtn}
-            onPress={message}
-          >
-            <Ionicons name="chatbubble" size={18} color={colors.onBrand} />
-            <Text style={styles.messageText}>Send Message</Text>
-          </Pressable>
+          <View style={styles.actionRow}>
+            <Pressable
+              testID="user-profile-follow-btn"
+              style={[
+                styles.followBtn,
+                profile.is_following && styles.followBtnActive,
+              ]}
+              onPress={toggleFollow}
+              disabled={followBusy}
+            >
+              <Ionicons
+                name={profile.is_following ? "checkmark" : "person-add"}
+                size={17}
+                color={profile.is_following ? colors.brand : colors.onBrand}
+              />
+              <Text
+                style={[
+                  styles.followText,
+                  profile.is_following && styles.followTextActive,
+                ]}
+              >
+                {profile.is_following ? "Following" : "Follow"}
+              </Text>
+            </Pressable>
+            <Pressable
+              testID="user-profile-message-btn"
+              style={styles.messageBtn}
+              onPress={message}
+            >
+              <Ionicons name="chatbubble" size={18} color={colors.onBrand} />
+              <Text style={styles.messageText}>Send Message</Text>
+            </Pressable>
+          </View>
         </ScrollView>
       )}
     </SafeAreaView>
@@ -280,6 +344,7 @@ const makeStyles = (colors: ThemeColors) =>
     color: colors.onBrandTertiary,
   },
   messageBtn: {
+    flex: 1.2,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
@@ -292,5 +357,35 @@ const makeStyles = (colors: ThemeColors) =>
     color: colors.onBrand,
     fontFamily: fonts.textBold,
     fontSize: 16,
+  },
+  nameRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  actionRow: {
+    flexDirection: "row",
+    gap: spacing.md,
+  },
+  followBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing.sm,
+    backgroundColor: colors.success,
+    borderRadius: radius.pill,
+    paddingVertical: spacing.lg,
+  },
+  followBtnActive: {
+    backgroundColor: colors.brandTertiary,
+  },
+  followText: {
+    color: colors.onBrand,
+    fontFamily: fonts.textBold,
+    fontSize: 16,
+  },
+  followTextActive: {
+    color: colors.brand,
   },
 });

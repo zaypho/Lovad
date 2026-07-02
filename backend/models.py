@@ -26,6 +26,8 @@ class UserUpdate(BaseModel):
     learning_languages: Optional[list[str]] = Field(default=None, max_length=3)
     age: Optional[int] = Field(default=None, ge=13, le=120)
     interests: Optional[list[str]] = Field(default=None, max_length=20)
+    gender: Optional[str] = Field(default=None, pattern="^(male|female)$")
+    privacy: Optional[dict] = None
 
 
 class AvatarUpload(BaseModel):
@@ -42,7 +44,9 @@ class ConversationCreate(BaseModel):
 
 
 class MomentCreate(BaseModel):
-    text: str = Field(min_length=1, max_length=1000)
+    text: str = Field(default="", max_length=1000)
+    image_base64: Optional[str] = None
+    mime: str = "image/jpeg"
 
 
 class CommentCreate(BaseModel):
@@ -74,6 +78,7 @@ class ImageMessageCreate(BaseModel):
 class RoomCreate(BaseModel):
     title: str = Field(min_length=1, max_length=80)
     language: str = Field(min_length=2, max_length=8)
+    languages: Optional[list[str]] = Field(default=None, max_length=2)
 
 
 class RoomRoleUpdate(BaseModel):
@@ -96,6 +101,22 @@ def _learning_list(doc: dict) -> list:
     return [doc["learning_language"]] if doc.get("learning_language") else []
 
 
+def apply_privacy(card: dict, doc: dict) -> dict:
+    """Strip fields the user chose to hide (viewed by others)."""
+    p = doc.get("privacy") or {}
+    if not p.get("show_age", True):
+        card["age"] = None
+    if not p.get("show_gender", True):
+        card["gender"] = None
+    if not p.get("show_interests", True):
+        card["interests"] = []
+    if not p.get("show_country", True):
+        card["country"] = None
+    if not p.get("show_online", True):
+        card["is_online"] = False
+    return card
+
+
 def user_public(doc: dict) -> dict:
     return {
         "id": doc["_id"],
@@ -111,6 +132,9 @@ def user_public(doc: dict) -> dict:
         "learning_languages": _learning_list(doc),
         "age": doc.get("age"),
         "interests": doc.get("interests") or [],
+        "gender": doc.get("gender"),
+        "is_vip": doc.get("is_vip", False),
+        "privacy": doc.get("privacy") or {},
         "streak_count": doc.get("streak_count", 0),
         "created_at": doc.get("created_at"),
     }
@@ -130,5 +154,7 @@ def user_card(doc: dict) -> dict:
         "learning_languages": _learning_list(doc),
         "age": doc.get("age"),
         "interests": doc.get("interests") or [],
+        "gender": doc.get("gender"),
+        "is_vip": doc.get("is_vip", False),
         "bio": doc.get("bio"),
     }

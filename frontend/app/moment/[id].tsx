@@ -1,5 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
+import { Image } from "expo-image";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useEffect, useState } from "react";
 import {
@@ -19,7 +20,7 @@ import { Avatar } from "@/src/components/Avatar";
 import { countryToCode } from "@/src/constants/countries";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
-import { api, Moment, MomentComment } from "@/src/utils/api";
+import { api, assetUrl, Moment, MomentComment } from "@/src/utils/api";
 import { timeAgo } from "@/src/utils/time";
 
 export default function MomentDetail() {
@@ -117,6 +118,12 @@ export default function MomentDetail() {
             ListHeaderComponent={
               <View style={styles.momentCard}>
                 <View style={styles.authorRow}>
+                <Pressable
+                  testID="moment-detail-author-avatar"
+                  onPress={() =>
+                    moment.author?.id && router.push(`/user/${moment.author.id}`)
+                  }
+                >
                   <Avatar
                     name={moment.author?.name}
                     url={moment.author?.avatar_url}
@@ -124,6 +131,7 @@ export default function MomentDetail() {
                     flagCode={countryToCode(moment.author?.country)}
                     online={moment.author?.is_online}
                   />
+                </Pressable>
                   <View>
                     <Text style={styles.authorName}>
                       {moment.author?.name}
@@ -132,6 +140,15 @@ export default function MomentDetail() {
                   </View>
                 </View>
                 <Text style={styles.momentText}>{moment.text}</Text>
+                {moment.image_url ? (
+                  <Image
+                    testID="moment-detail-image"
+                    source={{ uri: assetUrl(moment.image_url)! }}
+                    style={styles.momentImage}
+                    contentFit="cover"
+                    transition={150}
+                  />
+                ) : null}
                 <View style={styles.actionRow}>
                   <Pressable
                     testID="moment-detail-like-btn"
@@ -166,13 +183,20 @@ export default function MomentDetail() {
               <View
                 style={[styles.commentRow, item.reply_to && styles.replyRow]}
               >
-                <Avatar
-                  name={item.author?.name}
-                  url={item.author?.avatar_url}
-                  size={36}
-                  flagCode={countryToCode(item.author?.country)}
-                  online={item.author?.is_online}
-                />
+                <Pressable
+                  testID={`comment-author-avatar-${item.id}`}
+                  onPress={() =>
+                    item.author?.id && router.push(`/user/${item.author.id}`)
+                  }
+                >
+                  <Avatar
+                    name={item.author?.name}
+                    url={item.author?.avatar_url}
+                    size={36}
+                    flagCode={countryToCode(item.author?.country)}
+                    online={item.author?.is_online}
+                  />
+                </Pressable>
                 <View style={styles.commentBody}>
                   <Text style={styles.commentAuthor}>
                     {item.author?.name}{" "}
@@ -313,6 +337,13 @@ const makeStyles = (colors: ThemeColors) =>
     fontSize: 16,
     lineHeight: 24,
     color: colors.onSurface,
+  },
+  momentImage: {
+    width: "100%",
+    height: 240,
+    borderRadius: radius.sm,
+    backgroundColor: colors.surfaceTertiary,
+    marginTop: spacing.sm,
   },
   actionRow: {
     flexDirection: "row",
