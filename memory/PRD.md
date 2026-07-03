@@ -120,3 +120,8 @@ Note: Daily streak (backend touch_streak + profile/user page display) already ex
 ⚠️ ngrok install re-hoisted event-target-shim@6 to root → Metro "Missing ./index specifier" (react-native-webrtc imports event-target-shim/index). Fixed via patch-package: patches/event-target-shim+6.0.2.patch (adds "./index" export) + postinstall script. DO NOT REMOVE the patch or postinstall.
 ✅ N+1 queries batched ($in + map): moments.py (list authors, comment authors), chats.py (list partners; conversation_public/moment_public accept optional prefetched doc), rooms.py (list hosts)
 ✅ db.py ensure_indexes: per-index try/except (idempotent, survives transient Atlas handshake EOF — the original MongoDataMigrate failure was a retryable Atlas connection blip during index restore)
+
+## BuildImage deploy failure fixes (this session)
+✅ ROOT CAUSES of cloud build failure: (1) /app/.gitignore had a SECOND duplicate .env/.env.*/*.env block at end of file — frontend/.env & backend/.env were still git-ignored (previous fix only removed the first block); (2) stale frontend/package-lock.json coexisted with yarn.lock (packageManager=yarn) — npm ci mismatch risk, DELETED; (3) patch-package was in devDependencies with "postinstall": "patch-package" — fails on production installs, MOVED to dependencies.
+✅ Verified: `yarn install --frozen-lockfile` clean + patch applies; `npx expo export --platform web` EXIT 0 (2.91MB bundle); requirements.txt pip-installable (emergentintegrations==0.2.0 downloadable).
+✅ Added frontend/.metro-cache/ to .gitignore (thousands of cache files were untracked).
