@@ -125,3 +125,9 @@ Note: Daily streak (backend touch_streak + profile/user page display) already ex
 ✅ ROOT CAUSES of cloud build failure: (1) /app/.gitignore had a SECOND duplicate .env/.env.*/*.env block at end of file — frontend/.env & backend/.env were still git-ignored (previous fix only removed the first block); (2) stale frontend/package-lock.json coexisted with yarn.lock (packageManager=yarn) — npm ci mismatch risk, DELETED; (3) patch-package was in devDependencies with "postinstall": "patch-package" — fails on production installs, MOVED to dependencies.
 ✅ Verified: `yarn install --frozen-lockfile` clean + patch applies; `npx expo export --platform web` EXIT 0 (2.91MB bundle); requirements.txt pip-installable (emergentintegrations==0.2.0 downloadable).
 ✅ Added frontend/.metro-cache/ to .gitignore (thousands of cache files were untracked).
+
+## Deploy attempt 3 hardening (this session)
+✅ patches/event-target-shim+6.0.2.patch slimmed from 583KB (README/dist churn — high apply-failure risk) to minimal 464B package.json-only hunk; verified applies from pristine npm tarball state
+✅ backend/requirements.txt: added `--extra-index-url https://d33sy5i8bnduwe.cloudfront.net/simple/` first line (emergentintegrations==0.2.0 is NOT on public PyPI — sandbox had it in /etc/pip.conf but cloud builder may not)
+✅ CLEAN-ROOM build simulation passed: fresh dir + yarn install --frozen-lockfile (preinstall check-pkg OK, patch-package ✔) + npx expo export --platform web EXIT 0
+ℹ️ troubleshoot_agent suspected @config-plugins/react-native-webrtc plugin, but `npx expo config --type prebuild` evaluates cleanly (exit 0) — plugin KEPT (required for native calling builds)
