@@ -423,7 +423,7 @@ export default function EditProfile() {
   return (
     <View style={styles.container}>
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 120 }}
+        contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
         {/* Cover header */}

@@ -188,7 +188,7 @@ export default function UserProfile() {
   return (
     <View style={styles.container} testID="user-profile-screen">
       <ScrollView
-        contentContainerStyle={{ paddingBottom: 110 }}
+        contentContainerStyle={{ paddingBottom: 96 + insets.bottom }}
         showsVerticalScrollIndicator={false}
       >
         {/* Cover */}
