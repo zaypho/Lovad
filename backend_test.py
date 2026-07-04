@@ -1,245 +1,358 @@
 #!/usr/bin/env python3
 """
-Backend API test for Voice Room Gift Feature (most_gifted leaderboard)
-Tests the redesigned gift system where most_gifted tracks RECIPIENTS (not senders)
+Backend test for Voice Room + Moments Share-to-Moments feature
+Tests the new POST /api/rooms/{room_id}/share-to-moments endpoint
 """
-
 import requests
 import json
-import sys
 
-# Backend URL from frontend/.env
-BACKEND_URL = "https://368bd428-054d-4ed0-be5c-b4aaf6dfeef5.preview.emergentagent.com/api"
+BASE_URL = "https://368bd428-054d-4ed0-be5c-b4aaf6dfeef5.preview.emergentagent.com/api"
 
-# Test credentials from /app/memory/test_credentials.md
-USER_A_EMAIL = "mei@demo.com"
-USER_A_PASSWORD = "Demo1234!"
-USER_B_EMAIL = "diego@demo.com"
-USER_B_PASSWORD = "Demo1234!"
+# Test credentials
+USER_A = {"email": "mei@demo.com", "password": "Demo1234!"}
+USER_B = {"email": "diego@demo.com", "password": "Demo1234!"}
 
 def login(email, password):
-    """Login and return token and user_id"""
-    response = requests.post(
-        f"{BACKEND_URL}/auth/login",
-        json={"email": email, "password": password}
-    )
-    if response.status_code != 200:
-        print(f"❌ Login failed for {email}: {response.status_code} {response.text}")
-        return None, None
-    data = response.json()
-    return data.get("token"), data.get("user", {}).get("id")
+    """Login and return auth token"""
+    resp = requests.post(f"{BASE_URL}/auth/login", json={"email": email, "password": password})
+    if resp.status_code != 200:
+        print(f"❌ Login failed for {email}: {resp.status_code} {resp.text}")
+        return None
+    data = resp.json()
+    return data.get("token")
 
-def test_gift_feature():
-    """Test the voice room gift feature with most_gifted leaderboard"""
-    print("=" * 80)
-    print("VOICE ROOM GIFT FEATURE TEST - most_gifted leaderboard (tracks RECIPIENTS)")
-    print("=" * 80)
+def get_headers(token):
+    """Get auth headers"""
+    return {"Authorization": f"Bearer {token}"}
+
+def print_step(step_num, description):
+    """Print test step header"""
+    print(f"\n{'='*80}")
+    print(f"STEP {step_num}: {description}")
+    print('='*80)
+
+def main():
+    print("🧪 VOICE ROOM SHARE-TO-MOMENTS FEATURE TEST")
+    print("="*80)
     
-    # Step 1: Login as User A (mei@demo.com)
-    print("\n[Step 1] Login as User A (mei@demo.com)...")
-    token_a, user_a_id = login(USER_A_EMAIL, USER_A_PASSWORD)
-    if not token_a:
-        print("❌ FAILED: Could not login as User A")
-        return False
-    print(f"✅ User A logged in successfully (user_id: {user_a_id})")
+    # Login both users
+    print("\n📝 Logging in users...")
+    token_a = login(USER_A["email"], USER_A["password"])
+    token_b = login(USER_B["email"], USER_B["password"])
     
-    # Step 2: Login as User B (diego@demo.com)
-    print("\n[Step 2] Login as User B (diego@demo.com)...")
-    token_b, user_b_id = login(USER_B_EMAIL, USER_B_PASSWORD)
-    if not token_b:
-        print("❌ FAILED: Could not login as User B")
-        return False
-    print(f"✅ User B logged in successfully (user_id: {user_b_id})")
+    if not token_a or not token_b:
+        print("❌ Failed to login users. Aborting test.")
+        return
     
-    # Step 3: User A creates a room
-    print("\n[Step 3] User A (mei) creates a room...")
+    print(f"✅ User A (mei@demo.com) logged in")
+    print(f"✅ User B (diego@demo.com) logged in")
+    
+    headers_a = get_headers(token_a)
+    headers_b = get_headers(token_b)
+    
+    # Get user IDs
+    resp_a = requests.get(f"{BASE_URL}/auth/me", headers=headers_a)
+    resp_b = requests.get(f"{BASE_URL}/auth/me", headers=headers_b)
+    user_a_id = resp_a.json()["id"]
+    user_b_id = resp_b.json()["id"]
+    print(f"User A ID: {user_a_id}")
+    print(f"User B ID: {user_b_id}")
+    
+    # STEP 1: User A creates room WITHOUT share_to_moments
+    print_step(1, "User A (mei) creates room WITHOUT share_to_moments")
     room_data = {
-        "title": "Gift Test Room",
+        "title": "Share Test Room",
         "language": "en",
         "languages": ["en"],
         "mode": "chat",
-        "is_private": False
+        "is_private": False,
+        "share_to_moments": False
     }
-    response = requests.post(
-        f"{BACKEND_URL}/rooms",
-        json=room_data,
-        headers={"Authorization": f"Bearer {token_a}"}
-    )
-    if response.status_code not in [200, 201]:
-        print(f"❌ FAILED: Room creation failed: {response.status_code} {response.text}")
-        return False
-    room = response.json()
-    room_id = room.get("id")
-    print(f"✅ Room created successfully (room_id: {room_id})")
-    print(f"   Room title: {room.get('title')}")
-    print(f"   Host: {room.get('host', {}).get('name')}")
+    resp = requests.post(f"{BASE_URL}/rooms", json=room_data, headers=headers_a)
+    print(f"Status: {resp.status_code}")
+    print(f"Response: {json.dumps(resp.json(), indent=2)}")
     
-    # Step 4: User B joins the room
-    print("\n[Step 4] User B (diego) joins the room...")
-    response = requests.post(
-        f"{BACKEND_URL}/rooms/{room_id}/join",
-        headers={"Authorization": f"Bearer {token_b}"}
-    )
-    if response.status_code not in [200, 201]:
-        print(f"❌ FAILED: Room join failed: {response.status_code} {response.text}")
-        return False
-    print(f"✅ User B joined the room successfully")
+    if resp.status_code != 201:
+        print(f"❌ FAILED: Expected 201, got {resp.status_code}")
+        return
     
-    # Get User B's coins before sending gift
-    response = requests.get(
-        f"{BACKEND_URL}/auth/me",
-        headers={"Authorization": f"Bearer {token_b}"}
-    )
-    coins_before = response.json().get("coins", 0)
-    print(f"   User B coins before gift: {coins_before}")
+    room = resp.json()
+    room_id = room["id"]
+    print(f"✅ PASSED: Room created with ID: {room_id}")
+    print(f"   Title: {room['title']}")
+    print(f"   Mode: {room['mode']}")
+    print(f"   Is Private: {room['is_private']}")
     
-    # Step 5: User B sends a gift to User A (the host)
-    print("\n[Step 5] User B sends a rose gift (10 coins) to User A (the host)...")
-    gift_data = {
-        "to_user_id": user_a_id,
-        "gift_id": "rose"
+    # STEP 2: GET /api/moments as user A - confirm NO new moment
+    print_step(2, "GET /api/moments as user A - confirm NO new moment for this room")
+    resp = requests.get(f"{BASE_URL}/moments", headers=headers_a)
+    print(f"Status: {resp.status_code}")
+    
+    if resp.status_code != 200:
+        print(f"❌ FAILED: Expected 200, got {resp.status_code}")
+        return
+    
+    moments = resp.json()
+    initial_moment_count = len(moments)
+    room_moments = [m for m in moments if m.get("room") and m["room"].get("id") == room_id]
+    
+    print(f"Total moments: {initial_moment_count}")
+    print(f"Moments for room {room_id}: {len(room_moments)}")
+    
+    if len(room_moments) > 0:
+        print(f"❌ FAILED: Expected 0 moments for this room (share_to_moments was false), found {len(room_moments)}")
+        return
+    
+    print(f"✅ PASSED: No moment created for room (share_to_moments was false at creation)")
+    
+    # STEP 3: Host calls POST /api/rooms/{room_id}/share-to-moments
+    print_step(3, "Host (user A) calls POST /api/rooms/{room_id}/share-to-moments")
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/share-to-moments", headers=headers_a)
+    print(f"Status: {resp.status_code}")
+    print(f"Response: {json.dumps(resp.json(), indent=2)}")
+    
+    if resp.status_code != 201:
+        print(f"❌ FAILED: Expected 201, got {resp.status_code}")
+        return
+    
+    share_resp = resp.json()
+    if share_resp.get("shared") != True:
+        print(f"❌ FAILED: Expected {{shared: true}}, got {share_resp}")
+        return
+    
+    print(f"✅ PASSED: Room shared to moments successfully")
+    
+    # STEP 4: GET /api/moments as user A - confirm NEW moment exists
+    print_step(4, "GET /api/moments as user A - confirm NEW moment with room details")
+    resp = requests.get(f"{BASE_URL}/moments", headers=headers_a)
+    print(f"Status: {resp.status_code}")
+    
+    if resp.status_code != 200:
+        print(f"❌ FAILED: Expected 200, got {resp.status_code}")
+        return
+    
+    moments = resp.json()
+    new_moment_count = len(moments)
+    room_moments = [m for m in moments if m.get("room") and m["room"].get("id") == room_id]
+    
+    print(f"Total moments: {new_moment_count}")
+    print(f"Moments for room {room_id}: {len(room_moments)}")
+    
+    if len(room_moments) != 1:
+        print(f"❌ FAILED: Expected 1 moment for this room, found {len(room_moments)}")
+        return
+    
+    moment = room_moments[0]
+    print(f"\nMoment details:")
+    print(f"  ID: {moment['id']}")
+    print(f"  Text: {moment['text']}")
+    print(f"  Room ID: {moment['room']['id']}")
+    print(f"  Room is_live: {moment['room']['is_live']}")
+    print(f"  Room title: {moment['room'].get('title')}")
+    
+    # Verify moment details
+    if moment["room"]["id"] != room_id:
+        print(f"❌ FAILED: Moment room.id ({moment['room']['id']}) != room_id ({room_id})")
+        return
+    
+    if moment["room"]["is_live"] != True:
+        print(f"❌ FAILED: Expected room.is_live=true, got {moment['room']['is_live']}")
+        return
+    
+    if moment["room"].get("title") != "Share Test Room":
+        print(f"❌ FAILED: Expected room.title='Share Test Room', got {moment['room'].get('title')}")
+        return
+    
+    print(f"✅ PASSED: Moment created with correct room details (is_live=true, title='Share Test Room')")
+    
+    # STEP 5: Call share-to-moments AGAIN - should create SECOND moment
+    print_step(5, "Call POST /api/rooms/{room_id}/share-to-moments AGAIN (repeatable sharing)")
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/share-to-moments", headers=headers_a)
+    print(f"Status: {resp.status_code}")
+    print(f"Response: {json.dumps(resp.json(), indent=2)}")
+    
+    if resp.status_code != 201:
+        print(f"❌ FAILED: Expected 201, got {resp.status_code}")
+        return
+    
+    print(f"✅ PASSED: Second share succeeded (201)")
+    
+    # Verify 2 moments now exist
+    resp = requests.get(f"{BASE_URL}/moments", headers=headers_a)
+    moments = resp.json()
+    room_moments = [m for m in moments if m.get("room") and m["room"].get("id") == room_id]
+    
+    print(f"Moments for room {room_id}: {len(room_moments)}")
+    
+    if len(room_moments) != 2:
+        print(f"❌ FAILED: Expected 2 moments for this room (repeatable sharing), found {len(room_moments)}")
+        return
+    
+    print(f"✅ PASSED: Second moment created - repeatable sharing works (2 moments total)")
+    
+    # STEP 6: User B (non-host) tries to share - should fail with 403
+    print_step(6, "User B (diego, NOT host) tries POST /api/rooms/{room_id}/share-to-moments")
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/share-to-moments", headers=headers_b)
+    print(f"Status: {resp.status_code}")
+    print(f"Response: {resp.text}")
+    
+    if resp.status_code != 403:
+        print(f"❌ FAILED: Expected 403 (only host can share), got {resp.status_code}")
+        return
+    
+    resp_data = resp.json()
+    if "only the host" not in resp_data.get("detail", "").lower():
+        print(f"❌ FAILED: Expected 'only the host' error message, got: {resp_data.get('detail')}")
+        return
+    
+    print(f"✅ PASSED: Non-host correctly rejected with 403 (only host can share)")
+    
+    # STEP 7: User B joins room and raises hand
+    print_step(7, "User B joins room and raises hand")
+    
+    # Join room
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/join", headers=headers_b)
+    print(f"Join status: {resp.status_code}")
+    
+    if resp.status_code != 200:
+        print(f"❌ FAILED: User B join failed with {resp.status_code}")
+        return
+    
+    print(f"✅ User B joined room")
+    
+    # Raise hand
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/hand", headers=headers_b)
+    print(f"Hand raise status: {resp.status_code}")
+    print(f"Response: {json.dumps(resp.json(), indent=2)}")
+    
+    if resp.status_code != 200:
+        print(f"❌ FAILED: Hand raise failed with {resp.status_code}")
+        return
+    
+    hand_resp = resp.json()
+    if hand_resp.get("hand_raised") != True:
+        print(f"❌ FAILED: Expected hand_raised=true, got {hand_resp}")
+        return
+    
+    print(f"✅ User B raised hand")
+    
+    # Verify in room details
+    resp = requests.get(f"{BASE_URL}/rooms/{room_id}", headers=headers_a)
+    room = resp.json()
+    
+    print(f"\nRoom members:")
+    user_b_member = None
+    for member in room["members"]:
+        print(f"  - {member.get('name')}: role={member['role']}, hand_raised={member['hand_raised']}")
+        if member["id"] == user_b_id:
+            user_b_member = member
+    
+    if not user_b_member:
+        print(f"❌ FAILED: User B not found in room members")
+        return
+    
+    if user_b_member["hand_raised"] != True:
+        print(f"❌ FAILED: User B hand_raised should be true, got {user_b_member['hand_raised']}")
+        return
+    
+    if user_b_member["role"] != "listener":
+        print(f"❌ FAILED: User B role should be 'listener', got {user_b_member['role']}")
+        return
+    
+    print(f"✅ PASSED: User B in room with hand_raised=true and role='listener'")
+    
+    # STEP 8: Host accepts - change role to speaker
+    print_step(8, "Host accepts - change User B role to 'speaker'")
+    
+    role_data = {
+        "user_id": user_b_id,
+        "role": "speaker"
     }
-    response = requests.post(
-        f"{BACKEND_URL}/rooms/{room_id}/gift",
-        json=gift_data,
-        headers={"Authorization": f"Bearer {token_b}"}
-    )
-    if response.status_code not in [200, 201]:
-        print(f"❌ FAILED: Gift sending failed: {response.status_code} {response.text}")
-        return False
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/role", json=role_data, headers=headers_a)
+    print(f"Status: {resp.status_code}")
+    print(f"Response: {json.dumps(resp.json(), indent=2)}")
     
-    gift_response = response.json()
-    coins_after = gift_response.get("coins")
-    message = gift_response.get("message", {})
+    if resp.status_code != 200:
+        print(f"❌ FAILED: Role change failed with {resp.status_code}")
+        return
     
-    print(f"✅ Gift sent successfully")
-    print(f"   User B coins after gift: {coins_after}")
-    print(f"   Coins deducted: {coins_before - coins_after}")
-    print(f"   Message type: {message.get('type')}")
-    print(f"   Message text: {message.get('text')}")
+    print(f"✅ Role change request succeeded")
     
-    # Verify coins deducted correctly
-    if coins_before - coins_after != 10:
-        print(f"❌ FAILED: Expected 10 coins deducted, got {coins_before - coins_after}")
-        return False
-    print(f"✅ Coins deducted correctly (10 coins)")
+    # Verify role change and hand_raised reset
+    resp = requests.get(f"{BASE_URL}/rooms/{room_id}", headers=headers_a)
+    room = resp.json()
     
-    # Verify message type is 'gift'
-    if message.get('type') != 'gift':
-        print(f"❌ FAILED: Expected message type 'gift', got '{message.get('type')}'")
-        return False
-    print(f"✅ Message type is 'gift'")
+    print(f"\nRoom members after role change:")
+    user_b_member = None
+    for member in room["members"]:
+        print(f"  - {member.get('name')}: role={member['role']}, hand_raised={member['hand_raised']}")
+        if member["id"] == user_b_id:
+            user_b_member = member
     
-    # Step 6: Get room details and verify most_gifted
-    print("\n[Step 6] GET /api/rooms/{room_id} - verify most_gifted array...")
-    response = requests.get(
-        f"{BACKEND_URL}/rooms/{room_id}",
-        headers={"Authorization": f"Bearer {token_a}"}
-    )
-    if response.status_code != 200:
-        print(f"❌ FAILED: Get room failed: {response.status_code} {response.text}")
-        return False
+    if not user_b_member:
+        print(f"❌ FAILED: User B not found in room members")
+        return
     
-    room_details = response.json()
-    most_gifted = room_details.get("most_gifted", [])
+    if user_b_member["role"] != "speaker":
+        print(f"❌ FAILED: User B role should be 'speaker', got {user_b_member['role']}")
+        return
     
-    print(f"✅ Room details retrieved")
-    print(f"   most_gifted array: {json.dumps(most_gifted, indent=2)}")
+    if user_b_member["hand_raised"] != False:
+        print(f"❌ FAILED: User B hand_raised should reset to false, got {user_b_member['hand_raised']}")
+        return
     
-    # Verify most_gifted contains User A (recipient) with coins=10
-    if len(most_gifted) == 0:
-        print(f"❌ FAILED: most_gifted array is empty")
-        return False
+    print(f"✅ PASSED: User B role='speaker' and hand_raised reset to false")
     
-    top_gifted = most_gifted[0]
-    top_gifted_id = top_gifted.get("id")
-    top_gifted_coins = top_gifted.get("coins")
-    top_gifted_name = top_gifted.get("name")
+    # STEP 9: End room and verify moments show is_live=false
+    print_step(9, "End room and verify moments show is_live=false")
     
-    print(f"\n   Top most_gifted user:")
-    print(f"   - ID: {top_gifted_id}")
-    print(f"   - Name: {top_gifted_name}")
-    print(f"   - Coins: {top_gifted_coins}")
+    resp = requests.post(f"{BASE_URL}/rooms/{room_id}/end", headers=headers_a)
+    print(f"End room status: {resp.status_code}")
+    print(f"Response: {json.dumps(resp.json(), indent=2)}")
     
-    # Verify it's User A (the recipient/host), NOT User B (the sender)
-    if top_gifted_id != user_a_id:
-        print(f"❌ FAILED: most_gifted contains wrong user")
-        print(f"   Expected: User A (recipient) {user_a_id}")
-        print(f"   Got: {top_gifted_id}")
-        if top_gifted_id == user_b_id:
-            print(f"   ERROR: most_gifted shows User B (sender) instead of User A (recipient)")
-        return False
+    if resp.status_code != 200:
+        print(f"❌ FAILED: End room failed with {resp.status_code}")
+        return
     
-    if top_gifted_coins != 10:
-        print(f"❌ FAILED: most_gifted coins incorrect")
-        print(f"   Expected: 10 coins")
-        print(f"   Got: {top_gifted_coins} coins")
-        return False
+    print(f"✅ Room ended successfully")
     
-    print(f"✅ most_gifted correctly contains User A (RECIPIENT) with 10 coins")
-    print(f"✅ User B (SENDER) is NOT in most_gifted (as expected)")
+    # Verify moments show is_live=false
+    resp = requests.get(f"{BASE_URL}/moments", headers=headers_a)
+    moments = resp.json()
+    room_moments = [m for m in moments if m.get("room") and m["room"].get("id") == room_id]
     
-    # Step 7: Verify gift catalog
-    print("\n[Step 7] GET /api/rooms/gift-catalog - verify catalog...")
-    response = requests.get(
-        f"{BACKEND_URL}/rooms/gift-catalog",
-        headers={"Authorization": f"Bearer {token_a}"}
-    )
-    if response.status_code != 200:
-        print(f"❌ FAILED: Gift catalog failed: {response.status_code} {response.text}")
-        return False
+    print(f"\nMoments for ended room:")
+    all_false = True
+    for i, moment in enumerate(room_moments, 1):
+        is_live = moment["room"].get("is_live")
+        print(f"  Moment {i}: is_live={is_live}")
+        if is_live != False:
+            all_false = False
     
-    catalog = response.json()
-    gifts = catalog.get("gifts", [])
+    if len(room_moments) != 2:
+        print(f"❌ FAILED: Expected 2 moments for this room, found {len(room_moments)}")
+        return
     
-    print(f"✅ Gift catalog retrieved")
-    print(f"   User coins: {catalog.get('coins')}")
-    print(f"   Number of gifts: {len(gifts)}")
+    if not all_false:
+        print(f"❌ FAILED: All moments should show is_live=false after room ended")
+        return
     
-    if len(gifts) != 4:
-        print(f"❌ FAILED: Expected 4 gifts, got {len(gifts)}")
-        return False
+    print(f"✅ PASSED: Both moments show is_live=false (computed live from room state)")
     
-    expected_gifts = ["rose", "heart", "star", "crown"]
-    gift_ids = [g.get("id") for g in gifts]
-    
-    for expected_id in expected_gifts:
-        if expected_id not in gift_ids:
-            print(f"❌ FAILED: Missing gift '{expected_id}' in catalog")
-            return False
-    
-    print(f"✅ All 4 gifts present in catalog: {', '.join(gift_ids)}")
-    
-    for gift in gifts:
-        print(f"   - {gift.get('name')} {gift.get('emoji')}: {gift.get('price')} coins")
-    
-    print("\n" + "=" * 80)
-    print("✅ ALL TESTS PASSED - Voice Room Gift Feature Working Correctly")
-    print("=" * 80)
-    print("\nSUMMARY:")
-    print("✅ Step 1: User A (mei) login - PASSED")
-    print("✅ Step 2: User B (diego) login - PASSED")
-    print("✅ Step 3: User A creates room - PASSED")
-    print("✅ Step 4: User B joins room - PASSED")
-    print("✅ Step 5: User B sends gift to User A - PASSED")
-    print("   - Coins deducted correctly (10 coins)")
-    print("   - Gift message returned with type='gift'")
-    print("✅ Step 6: most_gifted verification - PASSED")
-    print("   - most_gifted contains User A (RECIPIENT) with 10 coins")
-    print("   - User B (SENDER) NOT in most_gifted (correct behavior)")
-    print("✅ Step 7: Gift catalog - PASSED")
-    print("   - Returns 4 gifts (rose, heart, star, crown)")
-    print("\n✅ DESIGN INTENT VERIFIED: most_gifted tracks who RECEIVED gifts")
-    print("   (not who sent them) - this is a 'who's most celebrated' leaderboard")
-    
-    return True
+    # FINAL SUMMARY
+    print("\n" + "="*80)
+    print("🎉 ALL TESTS PASSED (9/9)")
+    print("="*80)
+    print("✅ Step 1: Room created without share_to_moments")
+    print("✅ Step 2: No moment created initially")
+    print("✅ Step 3: Host shared room to moments (201)")
+    print("✅ Step 4: Moment created with is_live=true, correct title")
+    print("✅ Step 5: Second share created second moment (repeatable)")
+    print("✅ Step 6: Non-host rejected with 403")
+    print("✅ Step 7: User B joined and raised hand (listener)")
+    print("✅ Step 8: Host changed role to speaker, hand_raised reset")
+    print("✅ Step 9: Room ended, both moments show is_live=false")
+    print("="*80)
 
 if __name__ == "__main__":
-    try:
-        success = test_gift_feature()
-        sys.exit(0 if success else 1)
-    except Exception as e:
-        print(f"\n❌ TEST FAILED WITH EXCEPTION: {e}")
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
+    main()

@@ -419,3 +419,149 @@ agent_communication:
       message: "✅ VOICE ROOM + MOMENTS INTEGRATION TESTS COMPLETED (8/9 passed, 1 CRITICAL BUG found). PASSED: (1) Gift catalog returns 4 gifts with correct prices ✅ (2) Room creation with share_to_moments creates moment ✅ (3) Rooms list includes all required fields ✅ (4) Moment shows live room with is_live=true ✅ (5) Room ending works ✅ (6) Moment reflects room ended (is_live=false) ✅ (7) Private rooms don't create moments ✅ (8) Chat mute blocks non-host, allows host ✅. FAILED: (9) Gift sending top_gifters logic INCORRECT ❌. CRITICAL BUG DETAILS: When User A sends gift to User B, top_gifters shows User B (recipient) instead of User A (sender). Root cause: /app/backend/routes/rooms.py line 419 increments gift_totals for recipient (to_user_id) instead of sender (current_user['_id']). FIX: Change line 419 from '$inc': {f'gift_totals.{body.to_user_id}': gift['price']} to '$inc': {f'gift_totals.{current_user[\"_id\"]}': gift['price']}. This is a logic error - top_gifters should track who SENT gifts, not who RECEIVED them."
     - agent: "testing"
       message: "✅ VOICE ROOM GIFT FEATURE RE-TEST COMPLETED - ALL TESTS PASSED (7/7). The previously reported 'bug' was actually a DESIGN CHANGE. The field was renamed from 'top_gifters' to 'most_gifted' and now intentionally tracks who RECEIVED gifts (not who sent them). This is a 'who's most celebrated in this room' leaderboard, similar to live-streaming apps. Test results: (1) mei@demo.com login ✅ (2) diego@demo.com login ✅ (3) Mei creates room ✅ (4) Diego joins ✅ (5) Diego sends rose (10 coins) to Mei - coins deducted correctly, gift message with type='gift' returned ✅ (6) most_gifted array contains Mei (RECIPIENT) with 10 coins, NOT Diego (sender) ✅ (7) Gift catalog returns 4 gifts ✅. DESIGN INTENT VERIFIED: most_gifted correctly tracks gift RECIPIENTS for celebration leaderboard. No bugs found. Feature working as intended."
+
+
+## Test Run — Voice Room Share-to-Moments Feature (New Endpoint Testing)
+user_problem_statement: Test new POST /api/rooms/{room_id}/share-to-moments endpoint for repeatable room sharing, hand raising, role management, and live state tracking in moments.
+
+backend:
+  - task: "POST /api/rooms/{room_id}/share-to-moments - host can share room to moments"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "New endpoint allows host to share live room to moments feed. Returns 201 with {shared: true}."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: POST /api/rooms/{room_id}/share-to-moments as host returns 201 with {shared: true}. Moment created with room_id reference, text includes room title. Verified room.is_live=true, room.title='Share Test Room' in moment response."
+  
+  - task: "Repeatable room sharing - same room can be shared multiple times"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Host can share same room multiple times to bring in more people. Each share creates a new separate moment."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Called POST /api/rooms/{room_id}/share-to-moments twice on same room. Both calls returned 201. GET /api/moments shows 2 separate moments for same room_id. Repeatable sharing works correctly."
+  
+  - task: "Only host can share room - non-host gets 403"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Authorization check: only room host can share to moments. Non-host members get 403."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: User B (diego, non-host) called POST /api/rooms/{room_id}/share-to-moments. Correctly rejected with 403 and error message 'Only the host can share this room'. Authorization working correctly."
+  
+  - task: "Room creation without share_to_moments - no moment created"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "When room created with share_to_moments=false, no moment is created. Host can share later via endpoint."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Created room with share_to_moments=false. GET /api/moments confirmed 0 moments for this room_id. No moment created at room creation time as expected."
+  
+  - task: "POST /api/rooms/{room_id}/hand - raise hand and verify in room details"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Members can raise hand to request speaker role. Hand state visible in room member list."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: User B joined room and called POST /api/rooms/{room_id}/hand. Response: {hand_raised: true}. GET /api/rooms/{room_id} shows User B with hand_raised=true and role='listener'. Hand raising works correctly."
+  
+  - task: "POST /api/rooms/{room_id}/role - change role and reset hand_raised"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Host can change member role. When role changes, hand_raised automatically resets to false."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Host called POST /api/rooms/{room_id}/role with {user_id: user_b_id, role: 'speaker'}. Response: {ok: true}. GET /api/rooms/{room_id} shows User B with role='speaker' and hand_raised=false (reset). Role change and hand reset working correctly."
+  
+  - task: "POST /api/rooms/{room_id}/end - end room and verify moments reflect is_live=false"
+    implemented: true
+    working: true
+    file: "backend/routes/rooms.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Host ends room, sets is_live=false. Moments compute room state at read-time, so all moments for this room show is_live=false."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: Host called POST /api/rooms/{room_id}/end. Response: {ok: true}. GET /api/moments shows both moments for this room with room.is_live=false. Live state computed correctly at read-time from room document."
+  
+  - task: "GET /api/moments - room field computed live with is_live state"
+    implemented: true
+    working: true
+    file: "backend/routes/moments.py"
+    stuck_count: 0
+    priority: "high"
+    needs_retesting: false
+    status_history:
+        - working: "NA"
+          agent: "main"
+          comment: "Moments with room_id show live room data computed at read-time via _room_card function. Reflects current is_live state."
+        - working: true
+          agent: "testing"
+          comment: "✅ TESTED: GET /api/moments returns moments with room field. Before room end: room.is_live=true with full details (title, member_count, etc). After room end: room.is_live=false with only id and is_live fields. Live computation working correctly."
+
+metadata:
+  created_by: "main_agent"
+  version: "1.7"
+  test_sequence: 6
+  run_ui: false
+
+test_plan:
+  current_focus:
+    - "POST /api/rooms/{room_id}/share-to-moments endpoint"
+    - "Repeatable room sharing"
+    - "Hand raising and role management"
+  stuck_tasks: []
+  test_all: false
+  test_priority: "high_first"
+
+agent_communication:
+    - agent: "main"
+      message: "Implemented new POST /api/rooms/{room_id}/share-to-moments endpoint for repeatable room sharing. Host can share live room to moments multiple times. Added authorization (only host), private room check, and integration with existing _share_room_to_moments function. Please test: (1) Room creation without share_to_moments - no moment created. (2) Host shares room via endpoint - moment created with is_live=true. (3) Share again - second moment created (repeatable). (4) Non-host tries to share - 403. (5) User joins and raises hand - hand_raised=true. (6) Host changes role to speaker - hand_raised resets to false. (7) Host ends room - moments show is_live=false. Use mei@demo.com and diego@demo.com credentials."
+    - agent: "testing"
+      message: "✅ ALL TESTS PASSED (9/9) - VOICE ROOM SHARE-TO-MOMENTS FEATURE FULLY WORKING. Test results: (1) ✅ Room created without share_to_moments - no moment created initially. (2) ✅ Host shared room via POST /api/rooms/{room_id}/share-to-moments - returned 201 with {shared: true}, moment created with is_live=true and correct title. (3) ✅ Second share created second moment - repeatable sharing works (2 moments total for same room). (4) ✅ Non-host (diego) correctly rejected with 403 'Only the host can share this room'. (5) ✅ User B joined room and raised hand - hand_raised=true, role='listener' verified in room details. (6) ✅ Host changed User B role to 'speaker' - role updated and hand_raised reset to false. (7) ✅ Host ended room - both moments now show is_live=false (computed live from room state). (8) ✅ GET /api/moments returns room field with live state computed at read-time via _room_card. (9) ✅ All authorization, state management, and live computation working correctly. NO CRITICAL ISSUES FOUND. Feature ready for production."

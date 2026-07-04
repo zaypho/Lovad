@@ -138,6 +138,33 @@ async def list_rooms(current_user: CurrentUser):
     return [room_summary(d, user_map.get(d["host_id"]), user_map) for d in docs]
 
 
+async def _share_room_to_moments(doc: dict, user_id: str) -> None:
+    moment_doc = {
+        "_id": str(uuid.uuid4()),
+        "user_id": user_id,
+        "text": f"🎙️ Live voice room — join and chat: \"{doc['title']}\"",
+        "image_id": None,
+        "room_id": doc["_id"],
+        "likes": [],
+        "comment_count": 0,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await moments_col.insert_one(moment_doc)
+
+
+@router.post("/{room_id}/share-to-moments", status_code=201)
+async def share_room_to_moments(room_id: str, current_user: CurrentUser):
+    """Host can (re)share the live room to their Moments feed as many times
+    as they like, e.g. to bring in more people after the room quiets down."""
+    doc = await get_live_room(room_id)
+    if doc["host_id"] != current_user["_id"]:
+        raise HTTPException(status_code=403, detail="Only the host can share this room")
+    if doc.get("is_private"):
+        raise HTTPException(status_code=400, detail="Private rooms can't be shared")
+    await _share_room_to_moments(doc, current_user["_id"])
+    return {"shared": True}
+
+
 @router.post("", status_code=201)
 async def create_room(body: RoomCreate, current_user: CurrentUser):
     # Free users: configurable rooms/day; VIP hosts unlimited rooms.
@@ -176,17 +203,7 @@ async def create_room(body: RoomCreate, current_user: CurrentUser):
     }
     await rooms_col.insert_one(doc)
     if body.share_to_moments and not body.is_private:
-        moment_doc = {
-            "_id": str(uuid.uuid4()),
-            "user_id": current_user["_id"],
-            "text": f"🎙️ Live voice room — join and chat: \"{doc['title']}\"",
-            "image_id": None,
-            "room_id": doc["_id"],
-            "likes": [],
-            "comment_count": 0,
-            "created_at": doc["created_at"],
-        }
-        await moments_col.insert_one(moment_doc)
+        await _share_room_to_moments(doc, current_user["_id"])
     return await room_detail(doc)
 
 

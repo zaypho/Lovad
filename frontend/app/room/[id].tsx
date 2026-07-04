@@ -60,6 +60,7 @@ export default function RoomScreen() {
   const [bgIndex, setBgIndex] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
+  const [handModalOpen, setHandModalOpen] = useState(false);
   const [quickRepliesVisible, setQuickRepliesVisible] = useState(true);
   const [isFollowingHost, setIsFollowingHost] = useState(false);
   const [followBusy, setFollowBusy] = useState(false);
@@ -223,6 +224,23 @@ export default function RoomScreen() {
       await api.post(`/rooms/${id}/chat-mute`);
     } catch {
       // ignore
+    }
+  };
+
+  const shareToMoments = async () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    try {
+      await api.post(`/rooms/${id}/share-to-moments`);
+      setToolsOpen(false);
+      Alert.alert(
+        "Shared to Moments! 🎉",
+        "Your room is now visible in your Moments feed so more people can join.",
+      );
+    } catch (e) {
+      Alert.alert(
+        "Share",
+        e instanceof Error ? e.message : "Could not share this room right now.",
+      );
     }
   };
 
@@ -498,6 +516,27 @@ export default function RoomScreen() {
           </Pressable>
         </View>
 
+        {isHost && handRequests.length > 0 && (
+          <Pressable
+            testID="room-hand-requests-btn"
+            style={styles.handNotifyBar}
+            onPress={() => setHandModalOpen(true)}
+          >
+            <View style={styles.handNotifyIconWrap}>
+              <Ionicons name="hand-left" size={15} color="#FFFFFF" />
+              <View style={styles.handNotifyBadge}>
+                <Text style={styles.handNotifyBadgeText}>{handRequests.length}</Text>
+              </View>
+            </View>
+            <Text style={styles.handNotifyText}>
+              {handRequests.length === 1
+                ? `${handRequests[0].name} wants to join the stage`
+                : `${handRequests.length} people want to join the stage`}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color="rgba(255,255,255,0.7)" />
+          </Pressable>
+        )}
+
         <KeyboardAvoidingView
           style={{ flex: 1 }}
           behavior={Platform.OS === "web" ? undefined : "translate-with-padding"}
@@ -507,41 +546,6 @@ export default function RoomScreen() {
             contentContainerStyle={styles.stage}
             showsVerticalScrollIndicator={false}
           >
-            {isHost && handRequests.length > 0 && (
-              <View style={styles.requestsCard} testID="hand-requests-panel">
-                <Text style={styles.requestsTitle}>
-                  ✋ Stage requests · {handRequests.length}
-                </Text>
-                {handRequests.map((m) => (
-                  <View key={m.id} style={styles.requestRow}>
-                    <Avatar
-                      name={m.name}
-                      url={m.avatar_url}
-                      size={32}
-                      flagCode={countryToCode(m.country)}
-                    />
-                    <Text style={styles.requestName} numberOfLines={1}>
-                      {m.name}
-                    </Text>
-                    <Pressable
-                      testID={`hand-accept-${m.id}`}
-                      style={styles.acceptBtn}
-                      onPress={() => changeRole(m, "speaker")}
-                    >
-                      <Text style={styles.acceptText}>Accept</Text>
-                    </Pressable>
-                    <Pressable
-                      testID={`hand-dismiss-${m.id}`}
-                      style={styles.dismissBtn}
-                      onPress={() => dismissHand(m)}
-                      hitSlop={6}
-                    >
-                      <Ionicons name="close" size={16} color="#F87171" />
-                    </Pressable>
-                  </View>
-                ))}
-              </View>
-            )}
 
             <View style={styles.stageGrid}>
               {stageMembers.map(renderStageMember)}
@@ -898,7 +902,67 @@ export default function RoomScreen() {
                   </Text>
                 </Pressable>
               )}
+              {isHost && !room.is_private && (
+                <Pressable
+                  style={styles.menuRow}
+                  testID="room-share-moments-btn"
+                  onPress={shareToMoments}
+                >
+                  <Ionicons name="sparkles-outline" size={18} color="#FFFFFF" />
+                  <Text style={styles.menuText}>Share to Moments</Text>
+                </Pressable>
+              )}
             </View>
+          </Pressable>
+        </Modal>
+
+        <Modal
+          visible={handModalOpen}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setHandModalOpen(false)}
+        >
+          <Pressable
+            style={styles.modalBackdrop}
+            onPress={() => setHandModalOpen(false)}
+          >
+            <Pressable style={styles.menuSheet} onPress={() => {}}>
+              <Text style={styles.menuTitle}>
+                ✋ Stage requests · {handRequests.length}
+              </Text>
+              {handRequests.length === 0 ? (
+                <Text style={styles.menuText}>No pending requests.</Text>
+              ) : (
+                handRequests.map((m) => (
+                  <View key={m.id} style={styles.requestRow}>
+                    <Avatar
+                      name={m.name}
+                      url={m.avatar_url}
+                      size={36}
+                      flagCode={countryToCode(m.country)}
+                    />
+                    <Text style={styles.requestName} numberOfLines={1}>
+                      {m.name}
+                    </Text>
+                    <Pressable
+                      testID={`hand-accept-${m.id}`}
+                      style={styles.acceptBtn}
+                      onPress={() => changeRole(m, "speaker")}
+                    >
+                      <Text style={styles.acceptText}>Invite</Text>
+                    </Pressable>
+                    <Pressable
+                      testID={`hand-dismiss-${m.id}`}
+                      style={styles.dismissBtn}
+                      onPress={() => dismissHand(m)}
+                      hitSlop={6}
+                    >
+                      <Ionicons name="close" size={16} color="#F87171" />
+                    </Pressable>
+                  </View>
+                ))
+              )}
+            </Pressable>
           </Pressable>
         </Modal>
 
@@ -1054,17 +1118,47 @@ const makeStyles = () =>
       textTransform: "uppercase",
       letterSpacing: 0.6,
     },
-    requestsCard: {
-      backgroundColor: "rgba(255,255,255,0.1)",
-      borderRadius: radius.md,
-      padding: spacing.md,
+    handNotifyBar: {
+      flexDirection: "row",
+      alignItems: "center",
       gap: spacing.sm,
+      marginHorizontal: spacing.lg,
+      marginBottom: spacing.sm,
+      backgroundColor: "rgba(251,191,36,0.22)",
+      borderRadius: radius.pill,
       borderWidth: 1,
       borderColor: "rgba(251,191,36,0.5)",
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
     },
-    requestsTitle: {
+    handNotifyIconWrap: {
+      position: "relative",
+      width: 24,
+      height: 24,
+      alignItems: "center",
+      justifyContent: "center",
+    },
+    handNotifyBadge: {
+      position: "absolute",
+      top: -6,
+      right: -8,
+      minWidth: 16,
+      height: 16,
+      borderRadius: 8,
+      backgroundColor: "#EF4444",
+      alignItems: "center",
+      justifyContent: "center",
+      paddingHorizontal: 3,
+    },
+    handNotifyBadgeText: {
       fontFamily: fonts.textBold,
-      fontSize: 12,
+      fontSize: 9,
+      color: "#FFFFFF",
+    },
+    handNotifyText: {
+      flex: 1,
+      fontFamily: fonts.textSemi,
+      fontSize: 12.5,
       color: "#FFFFFF",
     },
     requestRow: {

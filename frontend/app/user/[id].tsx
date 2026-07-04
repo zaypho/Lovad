@@ -744,7 +744,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     langCode: {
       fontFamily: fonts.textBold,
-      fontSize: 16,
+      fontSize: 13,
       color: colors.onSurface,
     },
     langAccent: {
@@ -760,9 +760,9 @@ const makeStyles = (colors: ThemeColors) =>
       marginTop: 4,
     },
     dot: {
-      width: 5,
-      height: 5,
-      borderRadius: 2.5,
+      width: 4.5,
+      height: 4.5,
+      borderRadius: 2.25,
       backgroundColor: colors.surfaceTertiary,
     },
     dotFilled: {
@@ -770,7 +770,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     langName: {
       fontFamily: fonts.text,
-      fontSize: 12,
+      fontSize: 10.5,
       color: colors.onSurfaceSecondary,
       marginTop: 3,
     },

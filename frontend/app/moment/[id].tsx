@@ -20,6 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { Avatar } from "@/src/components/Avatar";
 import { VipBadge } from "@/src/components/Badges";
 import { LikersRow } from "@/src/components/LikersRow";
+import { RoomMomentCard } from "@/src/components/RoomMomentCard";
 import { countryToCode } from "@/src/constants/countries";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/context/ThemeContext";
@@ -91,6 +92,17 @@ export default function MomentDetail() {
     try {
       await api.post(`/moments/${id}/like`);
     } catch {
+      load();
+    }
+  };
+
+  const joinRoom = async (roomId: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    try {
+      await api.post(`/rooms/${roomId}/join`);
+      router.push(`/room/${roomId}`);
+    } catch {
+      Alert.alert("Room ended", "This voice room is no longer live.");
       load();
     }
   };
@@ -212,7 +224,13 @@ export default function MomentDetail() {
                     <Text style={styles.translationText}>{translation}</Text>
                   </View>
                 ) : null}
-                {moment.image_url ? (
+                {moment.room ? (
+                  <RoomMomentCard
+                    testID="moment-detail-room-card"
+                    room={moment.room}
+                    onPress={() => joinRoom(moment.room!.id)}
+                  />
+                ) : moment.image_url ? (
                   <Image
                     testID="moment-detail-image"
                     source={{ uri: assetUrl(moment.image_url)! }}
