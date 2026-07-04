@@ -259,7 +259,7 @@ export default function Connect() {
           style={styles.waveBtn}
           onPress={() => openChat(item)}
         >
-          <Ionicons name="hand-left" size={22} color="#FFFFFF" />
+          <Ionicons name="chatbubble-ellipses" size={18} color="#FFFFFF" />
         </Pressable>
       </Pressable>
     );
@@ -534,7 +534,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     catText: {
       fontFamily: fonts.textSemi,
-      fontSize: 16,
+      fontSize: 15,
       color: colors.onSurfaceSecondary,
     },
     catTextActive: {
@@ -560,7 +560,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     filterText: {
       fontFamily: fonts.textBold,
-      fontSize: 14,
+      fontSize: 13,
       color: colors.onSurfaceSecondary,
     },
     filterTextActive: {
@@ -628,7 +628,7 @@ const makeStyles = (colors: ThemeColors) =>
     },
     langCode: {
       fontFamily: fonts.textBold,
-      fontSize: 13,
+      fontSize: 12,
       color: colors.onSurface,
     },
     langBar: {
@@ -654,8 +654,8 @@ const makeStyles = (colors: ThemeColors) =>
     },
     cardSub: {
       fontFamily: fonts.text,
-      fontSize: 14,
-      lineHeight: 20,
+      fontSize: 13,
+      lineHeight: 19,
       color: colors.onSurfaceSecondary,
     },
     tagRow: {
@@ -688,8 +688,8 @@ const makeStyles = (colors: ThemeColors) =>
       color: "#EA580C",
     },
     waveBtn: {
-      width: 64,
-      height: 44,
+      width: 48,
+      height: 40,
       borderRadius: radius.pill,
       backgroundColor: "#6D5AE8",
       alignItems: "center",
