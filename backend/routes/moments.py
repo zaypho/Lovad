@@ -85,10 +85,11 @@ def comment_public(doc: dict, author: dict | None) -> dict:
 
 
 @router.get("")
-async def list_moments(current_user: CurrentUser):
+async def list_moments(current_user: CurrentUser, user_id: str | None = None):
+    query = {"user_id": user_id} if user_id else {}
     docs = (
         await moments_col.find(
-            {},
+            query,
             {"user_id": 1, "text": 1, "image_id": 1, "likes": 1, "comment_count": 1, "created_at": 1},
         )
         .sort("created_at", -1)

@@ -22,7 +22,8 @@ import { PROFICIENCY_LEVELS, langName } from "@/src/constants/languages";
 import { useAuth } from "@/src/context/AuthContext";
 import { useTheme } from "@/src/context/ThemeContext";
 import { fonts, radius, shadow, spacing, ThemeColors } from "@/src/theme";
-import { api, assetUrl, Conversation, User } from "@/src/utils/api";
+import { api, assetUrl, Conversation, Moment, User } from "@/src/utils/api";
+import { timeAgo } from "@/src/utils/time";
 
 type IconName = React.ComponentProps<typeof Ionicons>["name"];
 type TabKey = "about" | "moments" | "achievements";
@@ -37,9 +38,12 @@ export default function UserProfile() {
   const [followBusy, setFollowBusy] = useState(false);
   const [tab, setTab] = useState<TabKey>("about");
   const [momentsCount, setMomentsCount] = useState(0);
+  const [moments, setMoments] = useState<Moment[] | null>(null);
   const [liked, setLiked] = useState(false);
   const { colors } = useTheme();
   const styles = React.useMemo(() => makeStyles(colors), [colors]);
+
+  const isSelf = !!me && me.id === id;
 
   useEffect(() => {
     if (!me) return;
@@ -57,6 +61,10 @@ export default function UserProfile() {
     api
       .get<{ count: number }>(`/moments/user/${id}/count`)
       .then((d) => active && setMomentsCount(d.count))
+      .catch(() => {});
+    api
+      .get<Moment[]>(`/moments?user_id=${id}`)
+      .then((d) => active && setMoments(d))
       .catch(() => {});
     return () => {
       active = false;
@@ -208,13 +216,17 @@ export default function UserProfile() {
             >
               <Ionicons name="chevron-back" size={26} color="#FFFFFF" />
             </Pressable>
-            <Pressable
-              testID="user-menu-btn"
-              style={styles.coverIconBtn}
-              onPress={openMenu}
-            >
-              <Ionicons name="ellipsis-horizontal" size={24} color="#FFFFFF" />
-            </Pressable>
+            {isSelf ? (
+              <View style={styles.coverIconBtn} />
+            ) : (
+              <Pressable
+                testID="user-menu-btn"
+                style={styles.coverIconBtn}
+                onPress={openMenu}
+              >
+                <Ionicons name="ellipsis-horizontal" size={24} color="#FFFFFF" />
+              </Pressable>
+            )}
           </SafeAreaView>
         </View>
 
@@ -426,13 +438,99 @@ export default function UserProfile() {
           )}
 
           {tab === "moments" && (
-            <View style={[styles.section, styles.emptyBox]}>
-              <Ionicons name="planet-outline" size={40} color={colors.onSurfaceSecondary} />
-              <Text style={styles.emptyText}>
-                {momentsCount > 0
-                  ? `${profile.name} has ${momentsCount} moment${momentsCount === 1 ? "" : "s"}`
-                  : `${profile.name} hasn't posted any moments yet`}
-              </Text>
+            <View style={{ gap: spacing.md }}>
+              <View style={styles.momentsAggRow}>
+                <Text style={styles.aggText}>
+                  <Text style={styles.aggNum}>
+                    {(moments || []).reduce((s, m) => s + (m.like_count || 0), 0)}
+                  </Text>{" "}
+                  Like
+                </Text>
+                <Text style={styles.aggText}>
+                  <Text style={styles.aggNum}>
+                    {(moments || []).reduce(
+                      (s, m) => s + (m.comment_count || 0),
+                      0,
+                    )}
+                  </Text>{" "}
+                  Comment
+                </Text>
+              </View>
+
+              {moments === null ? (
+                <ActivityIndicator color={colors.brand} style={{ marginTop: spacing.lg }} />
+              ) : moments.length === 0 ? (
+                <View style={[styles.section, styles.emptyBox]}>
+                  <Ionicons
+                    name="planet-outline"
+                    size={40}
+                    color={colors.onSurfaceSecondary}
+                  />
+                  <Text style={styles.emptyText}>
+                    {isSelf
+                      ? "You haven't posted any moments yet"
+                      : `${profile.name} hasn't posted any moments yet`}
+                  </Text>
+                </View>
+              ) : (
+                moments.map((m) => (
+                  <Pressable
+                    key={m.id}
+                    testID={`moment-item-${m.id}`}
+                    style={styles.momentCard}
+                    onPress={() => router.push(`/moment/${m.id}`)}
+                  >
+                    <View style={styles.momentHead}>
+                      <Avatar
+                        name={profile.name}
+                        url={profile.avatar_url}
+                        size={40}
+                        flagCode={countryToCode(profile.country)}
+                      />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.momentName}>{profile.name}</Text>
+                        <Text style={styles.momentDate}>
+                          {timeAgo(m.created_at)}
+                        </Text>
+                      </View>
+                      {isSelf && (
+                        <View style={styles.boostChip}>
+                          <Ionicons name="rocket" size={13} color="#FFFFFF" />
+                          <Text style={styles.boostText}>Boost</Text>
+                        </View>
+                      )}
+                    </View>
+                    <Text style={styles.momentText}>{m.text}</Text>
+                    {m.image_url ? (
+                      <Image
+                        source={{ uri: assetUrl(m.image_url) || undefined }}
+                        style={styles.momentImg}
+                        contentFit="cover"
+                      />
+                    ) : null}
+                    <View style={styles.momentStats}>
+                      <View style={styles.momentStat}>
+                        <Ionicons
+                          name={m.liked_by_me ? "heart" : "heart-outline"}
+                          size={16}
+                          color={m.liked_by_me ? colors.error : colors.onSurfaceSecondary}
+                        />
+                        <Text style={styles.momentStatText}>{m.like_count}</Text>
+                      </View>
+                      <View style={styles.momentStat}>
+                        <Ionicons
+                          name="chatbubble-outline"
+                          size={15}
+                          color={colors.onSurfaceSecondary}
+                        />
+                        <Text style={styles.momentStatText}>
+                          {m.comment_count}
+                        </Text>
+                      </View>
+                    </View>
+                  </Pressable>
+                ))
+              )}
             </View>
           )}
 
@@ -460,36 +558,47 @@ export default function UserProfile() {
 
       {/* Bottom action bar */}
       <View style={[styles.bottomBar, { paddingBottom: insets.bottom + 12 }]}>
-        <Pressable
-          testID="user-profile-follow-btn"
-          style={[styles.followBtn, profile.is_following && styles.followBtnActive]}
-          onPress={toggleFollow}
-          disabled={followBusy}
-        >
-          {followBusy ? (
-            <ActivityIndicator size="small" color={colors.brand} />
-          ) : (
-            <Text style={styles.followText}>
-              {profile.is_following ? "Following" : "Follow"}
-            </Text>
-          )}
-        </Pressable>
-        <Pressable
-          testID="user-profile-message-btn"
-          style={styles.sayHiBtn}
-          onPress={message}
-        >
-          <Text style={styles.sayHiText}>Say Hi</Text>
-        </Pressable>
-        <Pressable
-          testID="user-gift-btn"
-          style={styles.giftBtn}
-          onPress={() =>
-            Alert.alert("Gifts", "Sending gifts is coming soon!")
-          }
-        >
-          <Ionicons name="gift" size={22} color="#FFFFFF" />
-        </Pressable>
+        {isSelf ? (
+          <Pressable
+            testID="post-moment-btn"
+            style={styles.postMomentBtn}
+            onPress={() => router.push("/(tabs)/moments")}
+          >
+            <Ionicons name="add-circle" size={20} color="#FFFFFF" />
+            <Text style={styles.postMomentText}>Post Moment</Text>
+          </Pressable>
+        ) : (
+          <>
+            <Pressable
+              testID="user-profile-follow-btn"
+              style={[styles.followBtn, profile.is_following && styles.followBtnActive]}
+              onPress={toggleFollow}
+              disabled={followBusy}
+            >
+              {followBusy ? (
+                <ActivityIndicator size="small" color={colors.brand} />
+              ) : (
+                <Text style={styles.followText}>
+                  {profile.is_following ? "Following" : "Follow"}
+                </Text>
+              )}
+            </Pressable>
+            <Pressable
+              testID="user-profile-message-btn"
+              style={styles.sayHiBtn}
+              onPress={message}
+            >
+              <Text style={styles.sayHiText}>Say Hi</Text>
+            </Pressable>
+            <Pressable
+              testID="user-gift-btn"
+              style={styles.giftBtn}
+              onPress={() => Alert.alert("Gifts", "Sending gifts is coming soon!")}
+            >
+              <Ionicons name="gift" size={22} color="#FFFFFF" />
+            </Pressable>
+          </>
+        )}
       </View>
     </View>
   );
@@ -894,5 +1003,95 @@ const makeStyles = (colors: ThemeColors) =>
       backgroundColor: "#EC4899",
       alignItems: "center",
       justifyContent: "center",
+    },
+    postMomentBtn: {
+      flex: 1,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "center",
+      gap: spacing.sm,
+      backgroundColor: "#6D5AE8",
+      borderRadius: radius.pill,
+      paddingVertical: spacing.lg,
+    },
+    postMomentText: {
+      fontFamily: fonts.textBold,
+      fontSize: 16,
+      color: "#FFFFFF",
+    },
+    momentsAggRow: {
+      flexDirection: "row",
+      gap: spacing.xl,
+    },
+    aggText: {
+      fontFamily: fonts.text,
+      fontSize: 15,
+      color: colors.onSurfaceSecondary,
+    },
+    aggNum: {
+      fontFamily: fonts.textBold,
+      color: colors.onSurface,
+    },
+    momentCard: {
+      backgroundColor: colors.surfaceSecondary,
+      borderRadius: radius.lg,
+      padding: spacing.lg,
+      gap: spacing.sm,
+    },
+    momentHead: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: spacing.sm,
+    },
+    momentName: {
+      fontFamily: fonts.textBold,
+      fontSize: 15,
+      color: colors.onSurface,
+    },
+    momentDate: {
+      fontFamily: fonts.text,
+      fontSize: 12,
+      color: colors.onSurfaceSecondary,
+    },
+    boostChip: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 4,
+      backgroundColor: "#EC4899",
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.md,
+      paddingVertical: 5,
+    },
+    boostText: {
+      fontFamily: fonts.textBold,
+      fontSize: 12,
+      color: "#FFFFFF",
+    },
+    momentText: {
+      fontFamily: fonts.text,
+      fontSize: 15,
+      lineHeight: 22,
+      color: colors.onSurface,
+    },
+    momentImg: {
+      width: "100%",
+      height: 180,
+      borderRadius: radius.md,
+      backgroundColor: colors.surfaceTertiary,
+    },
+    momentStats: {
+      flexDirection: "row",
+      gap: spacing.lg,
+      marginTop: spacing.xs,
+    },
+    momentStat: {
+      flexDirection: "row",
+      alignItems: "center",
+      gap: 5,
+    },
+    momentStatText: {
+      fontFamily: fonts.textSemi,
+      fontSize: 13,
+      color: colors.onSurfaceSecondary,
     },
   });

@@ -712,7 +712,7 @@ export default function EditProfile() {
         <Pressable
           testID="preview-btn"
           style={styles.previewBtn}
-          onPress={() => router.back()}
+          onPress={() => router.push(`/user/${user.id}`)}
         >
           <Text style={styles.previewText}>Preview</Text>
         </Pressable>
