@@ -3,6 +3,7 @@ import { useFocusEffect, useRouter } from "expo-router";
 import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  FlatList,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -172,7 +173,7 @@ export default function Chats() {
           <ActivityIndicator size="large" color={colors.brand} />
         </View>
       ) : (
-        <Animated.FlatList
+        <FlatList
           data={filtered}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}

@@ -6,6 +6,7 @@ import React, { useCallback, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  FlatList,
   Modal,
   Pressable,
   ScrollView,
@@ -364,7 +365,7 @@ export default function Connect() {
           </Pressable>
         </View>
       ) : (
-        <Animated.FlatList
+        <FlatList
           data={partners}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.list}
